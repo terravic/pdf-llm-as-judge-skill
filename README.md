@@ -146,10 +146,17 @@ All sample files provided in the `samples/` directory are completely synthetic a
    cd pdf-llm-as-judge-skill
    ```
 
-2. Configure your Gemini API key (required for live model calls):
-   ```bash
-   export GEMINI_API_KEY="your-gemini-api-key"
-   ```
+2. Authentication (choose either Google Cloud or Google AI Studio):
+   - **Google Cloud Vertex AI (Default / Enterprise)**:
+     ```bash
+     gcloud auth application-default login
+     # Project ID is automatically detected from active gcloud config or GOOGLE_CLOUD_PROJECT
+     export GOOGLE_CLOUD_PROJECT="your-gcp-project-id" # optional if gcloud is configured
+     ```
+   - **Google AI Studio (Alternative)**:
+     ```bash
+     export GEMINI_API_KEY="your-gemini-api-key"
+     ```
 
 ---
 

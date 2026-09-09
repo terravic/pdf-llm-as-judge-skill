@@ -52,14 +52,19 @@ Features (Organized across 5 tabs from left to right):
 
 When a user requests PDF extraction and verification:
 
-### Step 1: Verify Input Files
+### Step 1: Authentication & Environment
+The pipeline natively supports both Google Cloud Vertex AI and Google AI Studio:
+- **Google Cloud (Default / Recommended)**: If the user is authenticated via Google Cloud (`gcloud auth application-default login` or active `gcloud` session), the pipeline automatically resolves credentials and routes requests through Vertex AI. **Do NOT prompt the user for an API key** if Google Cloud ADC or `gcloud` is available.
+- **Google AI Studio (Alternative)**: If `GEMINI_API_KEY` is present in the environment or passed via `--api-key`, the client will use the AI Studio endpoint.
+
+### Step 2: Verify Input Files
 Check that the required input files exist:
 - Target PDF document (e.g., [samples/healthcare_patient_intake_form.pdf](samples/healthcare_patient_intake_form.pdf) or [samples/cancer_screening_lab_report.pdf](samples/cancer_screening_lab_report.pdf))
 - Target Rubric Specification JSON (e.g., [samples/rubric_spec_healthcare_patient_intake_form.json](samples/rubric_spec_healthcare_patient_intake_form.json) or [samples/rubric_spec_cancer_screening_lab_report.json](samples/rubric_spec_cancer_screening_lab_report.json))
 
 If a custom rubric is not supplied, inspect the document and construct a rubric specification adhering to the format defined in the samples.
 
-### Step 2: Execute the Pipeline and Generate Dashboard
+### Step 3: Execute the Pipeline and Generate Dashboard
 Run the pipeline runner script specifying both JSON output and UI dashboard output:
 
 ```bash
@@ -91,7 +96,7 @@ python3 scripts/evaluate_candidate.py \
   --dashboard ui/index.html
 ```
 
-### Step 3: Interpret Output and Present Dashboard
+### Step 4: Interpret Output and Present Dashboard
 Read the generated output JSON and present a clear summary:
 1. **Accepted Fields**: List all fields that attained unanimous or majority consensus along with their extracted values.
 2. **Contested Fields (HITL)**: Highlight fields that received split verdicts (e.g., 3/5 passes). Present the candidate value, the specific dissent reasons from the judges, and any proposed corrections for user confirmation.
