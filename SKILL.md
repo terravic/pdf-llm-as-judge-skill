@@ -65,14 +65,16 @@ Check that the required input files exist:
 If a custom rubric is not supplied, inspect the document and construct a rubric specification adhering to the format defined in the samples.
 
 ### Step 3: Execute the Pipeline and Generate Dashboard
-Run the pipeline runner script specifying both JSON output and UI dashboard output:
+Run the pipeline runner script specifying both JSON output and UI dashboard output. By default, the pipeline uses `gemini-3.8-flash` for extraction and `gemini-3.6-flash` for the 5-judge panel. Custom models can be passed via `--extractor-model` and `--judge-model`:
 
 ```bash
 python3 scripts/run_pipeline.py \
   --pdf <PATH_TO_PDF> \
   --rubric <PATH_TO_RUBRIC_JSON> \
   --output <PATH_TO_OUTPUT_JSON> \
-  --dashboard <PATH_TO_DASHBOARD_HTML>
+  --dashboard <PATH_TO_DASHBOARD_HTML> \
+  --extractor-model gemini-3.8-flash \
+  --judge-model gemini-3.6-flash
 ```
 
 Example using the sample files:
