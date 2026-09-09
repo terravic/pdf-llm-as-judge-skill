@@ -1,0 +1,40 @@
+{
+  "patient_full_name": "Marcus Aurelius Vance",
+  "date_of_birth": "1958-09-12",
+  "medical_record_number": "MRN-6192840",
+  "accession_id": "ACC-2026-MCED-8841",
+  "ordering_physician": "Dr. Sarah Lin, MD",
+  "cancer_signal_status": "SIGNAL DETECTED",
+  "primary_cancer_signal_origin": "Pancreato-Biliary",
+  "primary_origin_probability": 0.78,
+  "estimated_tumor_fraction_pct": 5.2,
+  "detected_somatic_mutations": [
+    {
+      "gene": "KRAS",
+      "variant": "c.35G>T (p.Gly12Val / G12V)",
+      "exon": "Exon 2",
+      "vaf_pct": "4.2%",
+      "tier": "Tier I - Pathogenic (Pancreato-Biliary / Upper GI)"
+    },
+    {
+      "gene": "SMAD4",
+      "variant": "c.1082G>A (p.Arg361His / R361H)",
+      "exon": "Exon 9",
+      "vaf_pct": "2.8%",
+      "tier": "Tier I - Pathogenic (TGF-beta Signaling Pathway)"
+    },
+    {
+      "gene": "TP53",
+      "variant": "c.524G>A (p.Arg175His / R175H)",
+      "exon": "Exon 5",
+      "vaf_pct": "3.5%",
+      "tier": "Tier I - Pathogenic (Structural Hotspot Mutation)"
+    }
+  ],
+  "methylation_biomarkers": {
+    "sept9_index": 0.82,
+    "sdc2_index": 0.74,
+    "ndrg4_index": 0.65
+  },
+  "serum_carcinoembryonic_antigen_ng_ml": 18.9
+}

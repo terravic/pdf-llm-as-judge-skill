@@ -114,9 +114,12 @@ pdf-llm-as-judge-skill/
 │   ├── healthcare_patient_intake_form.pdf          # Patient intake form sample PDF
 │   ├── rubric_spec_healthcare_patient_intake_form.json # Intake form rubric specification
 │   ├── expected_candidate_healthcare_patient_intake_form.json # Intake form reference extraction
-│   ├── cancer_screening_lab_report.pdf             # Cancer screening molecular diagnostics PDF
+│   ├── cancer_screening_lab_report.pdf             # Cancer screening molecular diagnostics PDF (vector text)
+│   ├── cancer_screening_lab_report_scanned.pdf     # Cancer screening report (100% image-only, flatbed scanner artifacts)
+│   ├── cancer_screening_lab_report_degraded.pdf    # Cancer screening report (100% image-only, heavy noise & smudge)
 │   ├── rubric_spec_cancer_screening_lab_report.json # Cancer screening rubric specification
-│   └── expected_candidate_cancer_screening_lab_report.json # Cancer screening reference extraction
+│   ├── expected_candidate_cancer_screening_lab_report.json # Cancer screening reference extraction
+│   └── expected_candidate_cancer_screening_lab_report_degraded.json # Reference extraction for degraded sample
 └── tests/
     ├── __init__.py                                 # Test package root
     ├── test_models.py                              # Schema and deserialization tests
