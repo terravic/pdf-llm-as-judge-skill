@@ -40,7 +40,7 @@ class GeminiClient:
             or os.environ.get("ACCESS_TOKEN")
             or self._resolve_gcp_access_token()
         )
-        self.project_id = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_PROJECT")
+        self.project_id = self._resolve_gcp_project_id()
         self.location = os.environ.get("GOOGLE_CLOUD_LOCATION") or os.environ.get("VERTEX_LOCATION", "us-central1")
         self.base_url = base_url or os.environ.get("GEMINI_API_BASE_URL") or self.DEFAULT_BASE_URL
         self.timeout = timeout
@@ -71,6 +71,37 @@ class GeminiClient:
                 timeout=5,
             )
             if result.returncode == 0 and result.stdout.strip():
+                return result.stdout.strip()
+        except Exception:
+            pass
+
+        return None
+
+    def _resolve_gcp_project_id(self) -> Optional[str]:
+        """Attempts to dynamically obtain the Google Cloud Project ID."""
+        project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_PROJECT")
+        if project:
+            return project
+
+        try:
+            import google.auth
+            _, default_project = google.auth.default(
+                scopes=["https://www.googleapis.com/auth/cloud-platform"]
+            )
+            if default_project:
+                return default_project
+        except Exception:
+            pass
+
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["gcloud", "config", "get-value", "project"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            if result.returncode == 0 and result.stdout.strip() and "(unset)" not in result.stdout:
                 return result.stdout.strip()
         except Exception:
             pass
