@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pdf-consensus-evaluator"
+version = "1.0.0"
+description = "Multi-Agent PDF Extraction and Consensus Evaluator using LLM-as-a-Judge panels"
+authors = [{ name = "AI Engineering Team" }]
+license = { text = "Apache-2.0" }
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "requests>=2.28.0",
+    "pypdf>=3.0.0",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "pytest-asyncio>=0.20.0",
+]
+
+[project.scripts]
+pdf-evaluator = "pdf_consensus_evaluator.cli:main"

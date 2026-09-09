@@ -1,0 +1,66 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+env/
+.health-venv/
+.python-version
+
+# --- Jupyter / Colab ---
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# --- Node / A2UI tooling ---
+node_modules/
+npm-debug.log*
+yarn-error.log*
+
+# --- Secrets / credentials (never commit) ---
+*.env
+*-service-account*.json
+*credentials*.json
+*.pem
+*.key
+
+# --- Terraform ---
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfvars
+
+# --- Data (keep out of git; use BigQuery / GCS) ---
+*.csv
+*.parquet
+*.avro
+
+tmp/
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+
+CLAUDE.md
+.claude/
+
+.refs/
+
+.adk/
+
+# --- Local / Personal Notes ---
+TODO*.md
+*.local.md
+
+notes/
+
+# Per-component build backlogs — dev working docs, deliberately unshared. The committed
+# per-component README carries what a reader needs; BUILD-NOTES carries what is still owed.
+BUILD-NOTES.md
+

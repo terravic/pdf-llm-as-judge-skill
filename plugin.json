@@ -1,0 +1,11 @@
+{
+  "name": "pdf-llm-as-judge-skill",
+  "version": "1.0.0",
+  "description": "Multi-Agent PDF Extraction and Consensus Evaluator Plugin with 5x LLM Judges",
+  "skills": [
+    {
+      "name": "pdf-extraction-consensus-evaluator",
+      "path": "SKILL.md"
+    }
+  ]
+}

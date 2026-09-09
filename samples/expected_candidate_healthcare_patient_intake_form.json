@@ -1,0 +1,13 @@
+{
+  "patient_full_name": "Eleanor Vance Sterling",
+  "date_of_birth": "1984-11-23",
+  "social_security_number": "987-65-4320",
+  "residential_address": {
+    "street": "742 Evergreen Terrace, Apt 3B",
+    "city": "St. Paul",
+    "state": "MN",
+    "zip_code": "55102"
+  },
+  "insurance_member_id": "XMN-849201840-01",
+  "primary_diagnosis_code": "C50.912"
+}

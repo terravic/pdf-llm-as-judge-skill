@@ -1,0 +1,227 @@
+{
+  "rubric_version": "2.0",
+  "document_type": "Cancer_Screening_Molecular_Diagnostic_Report",
+  "extraction_criteria": [
+    {
+      "field_name": "patient_full_name",
+      "syntactic_rules": {
+        "required": true,
+        "type": "string",
+        "min_tokens": 2
+      },
+      "semantic_grounding_rules": {
+        "source_section": "PATIENT IDENTIFICATION",
+        "verification_criteria": "Must match the patient's legal name 'Arthur Pendelton Hayes'. Do not accept the preferred name 'Art Hayes'.",
+        "failure_modes": [
+          "PREFERRED_NAME_CONFUSED_WITH_LEGAL",
+          "NAME_TRUNCATED",
+          "HALLUCINATION"
+        ]
+      }
+    },
+    {
+      "field_name": "date_of_birth",
+      "syntactic_rules": {
+        "required": true,
+        "type": "string",
+        "format_regex": "^\\d{4}-\\d{2}-\\d{2}$"
+      },
+      "semantic_grounding_rules": {
+        "source_section": "PATIENT IDENTIFICATION",
+        "verification_criteria": "Must match '1961-04-14'. Must not be confused with the Collection Date ('2026-08-14') or Report Date ('2026-08-18').",
+        "failure_modes": [
+          "CONFUSED_WITH_COLLECTION_DATE",
+          "CONFUSED_WITH_REPORT_DATE",
+          "FORMAT_MISMATCH"
+        ]
+      }
+    },
+    {
+      "field_name": "medical_record_number",
+      "syntactic_rules": {
+        "required": true,
+        "type": "string",
+        "format_regex": "^MRN-\\d{7}$"
+      },
+      "semantic_grounding_rules": {
+        "source_section": "PATIENT IDENTIFICATION",
+        "verification_criteria": "Must match 'MRN-7840192'. Must not be confused with Accession ID ('ACC-2026-MCED-9184') or Physician NPI ('1487920153').",
+        "failure_modes": [
+          "CONFUSED_WITH_ACCESSION_NUMBER",
+          "CONFUSED_WITH_NPI",
+          "DIGIT_TRANSPOSITION"
+        ]
+      }
+    },
+    {
+      "field_name": "accession_id",
+      "syntactic_rules": {
+        "required": true,
+        "type": "string",
+        "format_regex": "^ACC-2026-MCED-\\d{4}$"
+      },
+      "semantic_grounding_rules": {
+        "source_section": "SPECIMEN & ORDER INFORMATION",
+        "verification_criteria": "Must match 'ACC-2026-MCED-9184'. Must not be confused with MRN or CAP accreditation numbers.",
+        "failure_modes": [
+          "CONFUSED_WITH_MRN",
+          "FORMAT_MISMATCH",
+          "HALLUCINATION"
+        ]
+      }
+    },
+    {
+      "field_name": "ordering_physician",
+      "syntactic_rules": {
+        "required": true,
+        "type": "string"
+      },
+      "semantic_grounding_rules": {
+        "source_section": "SPECIMEN & ORDER INFORMATION",
+        "verification_criteria": "Must extract 'Dr. Evelyn Montgomery, MD'. Must not confuse with Medical Director 'Marcus Vance, MD, PhD, FCAP'.",
+        "failure_modes": [
+          "LAB_DIRECTOR_CONFUSED_AS_ORDERING_PHYSICIAN",
+          "PHYSICIAN_NAME_TRUNCATED",
+          "NPI_CONFUSED_AS_NAME"
+        ]
+      }
+    },
+    {
+      "field_name": "cancer_signal_status",
+      "syntactic_rules": {
+        "required": true,
+        "type": "string",
+        "enum_values": [
+          "SIGNAL DETECTED",
+          "NO SIGNAL DETECTED",
+          "INDETERMINATE"
+        ]
+      },
+      "semantic_grounding_rules": {
+        "source_section": "OVERALL CANCER SIGNAL STATUS",
+        "verification_criteria": "Must be 'SIGNAL DETECTED' verbatim as displayed in the primary result banner.",
+        "failure_modes": [
+          "INCORRECT_CLASSIFICATION",
+          "HALLUCINATION",
+          "FORMAT_MISMATCH"
+        ]
+      }
+    },
+    {
+      "field_name": "primary_cancer_signal_origin",
+      "syntactic_rules": {
+        "required": true,
+        "type": "string"
+      },
+      "semantic_grounding_rules": {
+        "source_section": "OVERALL CANCER SIGNAL STATUS",
+        "verification_criteria": "Must extract 'Colorectal' as the primary signal origin (CSO 1). Must NOT extract the secondary origin 'Upper GI / Gastric' as primary.",
+        "failure_modes": [
+          "SECONDARY_ORIGIN_CONFUSED_AS_PRIMARY",
+          "HALLUCINATION",
+          "TEXT_TRUNCATION"
+        ]
+      }
+    },
+    {
+      "field_name": "primary_origin_probability",
+      "syntactic_rules": {
+        "required": true,
+        "type": "number",
+        "value_range": {
+          "min": 0.0,
+          "max": 1.0
+        }
+      },
+      "semantic_grounding_rules": {
+        "source_section": "OVERALL CANCER SIGNAL STATUS",
+        "verification_criteria": "Must extract 0.84 (or 84%). Represents the prediction probability for Colorectal origin.",
+        "failure_modes": [
+          "SECONDARY_PROBABILITY_EXTRACTED",
+          "PERCENTAGE_NOT_CONVERTED_TO_DECIMAL",
+          "VALUE_TRANSPOSITION"
+        ]
+      }
+    },
+    {
+      "field_name": "estimated_tumor_fraction_pct",
+      "syntactic_rules": {
+        "required": true,
+        "type": "number",
+        "value_range": {
+          "min": 0.0,
+          "max": 100.0
+        }
+      },
+      "semantic_grounding_rules": {
+        "source_section": "OVERALL CANCER SIGNAL STATUS",
+        "verification_criteria": "Must extract 3.8 representing the estimated circulating tumor fraction percentage (3.8% ctDNA).",
+        "failure_modes": [
+          "MUTATION_VAF_CONFUSED_AS_TUMOR_FRACTION",
+          "DECIMAL_SHIFT",
+          "HALLUCINATION"
+        ]
+      }
+    },
+    {
+      "field_name": "detected_somatic_mutations",
+      "syntactic_rules": {
+        "required": true,
+        "type": "array",
+        "expected_subfields": [
+          "gene",
+          "variant",
+          "exon",
+          "vaf_pct",
+          "tier"
+        ]
+      },
+      "semantic_grounding_rules": {
+        "source_section": "SECTION 1: TARGETED SOMATIC GENOMIC ALTERATIONS",
+        "verification_criteria": "Must include all three detected pathogenic mutations (KRAS c.35G>A / p.G12D at 2.4% VAF, APC c.4348C>T / p.R1450* at 3.1% VAF, TP53 c.818G>A / p.R273H at 1.9% VAF). Non-detected genes (PIK3CA, BRAF) must not be listed as detected mutations.",
+        "failure_modes": [
+          "MISSING_DETECTED_MUTATION",
+          "NEGATIVE_MARKER_REPORTED_AS_POSITIVE",
+          "VAF_TRANSPOSITION"
+        ]
+      }
+    },
+    {
+      "field_name": "methylation_biomarkers",
+      "syntactic_rules": {
+        "required": true,
+        "type": "object",
+        "expected_subfields": [
+          "sept9_index",
+          "sdc2_index",
+          "ndrg4_index"
+        ]
+      },
+      "semantic_grounding_rules": {
+        "source_section": "SECTION 2: EPIGENETIC METHYLATION PATTERNS & CIRCULATING PROTEIN MARKERS",
+        "verification_criteria": "Must extract sept9_index (0.79), sdc2_index (0.68), and ndrg4_index (0.72) from Section 2.",
+        "failure_modes": [
+          "CONFUSED_WITH_REFERENCE_BASELINE",
+          "VALUE_TRANSPOSITION",
+          "MISSING_BIOMARKER"
+        ]
+      }
+    },
+    {
+      "field_name": "serum_carcinoembryonic_antigen_ng_ml",
+      "syntactic_rules": {
+        "required": true,
+        "type": "number"
+      },
+      "semantic_grounding_rules": {
+        "source_section": "SECTION 2: EPIGENETIC METHYLATION PATTERNS & CIRCULATING PROTEIN MARKERS",
+        "verification_criteria": "Must extract 12.4 representing the Serum Carcinoembryonic Antigen (CEA) value in ng/mL. Must NOT confuse with CA 19-9 (48.2) or AFP (4.1).",
+        "failure_modes": [
+          "CONFUSED_WITH_CA_19_9",
+          "CONFUSED_WITH_AFP",
+          "UNITS_INCLUDED_IN_NUMERIC_FIELD"
+        ]
+      }
+    }
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "patient_full_name": "Arthur Pendelton Hayes",
+  "date_of_birth": "1961-04-14",
+  "medical_record_number": "MRN-7840192",
+  "accession_id": "ACC-2026-MCED-9184",
+  "ordering_physician": "Dr. Evelyn Montgomery, MD",
+  "cancer_signal_status": "SIGNAL DETECTED",
+  "primary_cancer_signal_origin": "Colorectal",
+  "primary_origin_probability": 0.84,
+  "estimated_tumor_fraction_pct": 3.8,
+  "detected_somatic_mutations": [
+    {
+      "gene": "KRAS",
+      "variant": "c.35G>A (p.Gly12Asp / G12D)",
+      "exon": "Exon 2",
+      "vaf_pct": "2.4%",
+      "tier": "Tier I - Pathogenic (Colorectal / GI Lineage)"
+    },
+    {
+      "gene": "APC",
+      "variant": "c.4348C>T (p.Arg1450Ter / R1450*)",
+      "exon": "Exon 16",
+      "vaf_pct": "3.1%",
+      "tier": "Tier I - Pathogenic (Truncating / Wnt Pathway)"
+    },
+    {
+      "gene": "TP53",
+      "variant": "c.818G>A (p.Arg273His / R273H)",
+      "exon": "Exon 8",
+      "vaf_pct": "1.9%",
+      "tier": "Tier I - Pathogenic (DNA Binding Domain)"
+    }
+  ],
+  "methylation_biomarkers": {
+    "sept9_index": 0.79,
+    "sdc2_index": 0.68,
+    "ndrg4_index": 0.72
+  },
+  "serum_carcinoembryonic_antigen_ng_ml": 12.4
+}

@@ -1,0 +1,567 @@
+{
+  "document_type": "Cancer_Screening_Molecular_Diagnostic_Report",
+  "rubric_version": "2.0",
+  "timestamp": "2026-09-09T01:34:21.700512+00:00",
+  "total_fields": 12,
+  "accepted_field_count": 0,
+  "contested_field_count": 0,
+  "rejected_field_count": 12,
+  "quorum_metadata": {
+    "requested_judges": 5,
+    "successful_judges": 0,
+    "quorum_degraded": true,
+    "judge_errors": [
+      {
+        "judge_id": "judge_1",
+        "error": "Judge judge_1 encountered exception: Gemini API Key is required. Please set the GEMINI_API_KEY environment variable or pass api_key to the client."
+      },
+      {
+        "judge_id": "judge_2",
+        "error": "Judge judge_2 encountered exception: Gemini API Key is required. Please set the GEMINI_API_KEY environment variable or pass api_key to the client."
+      },
+      {
+        "judge_id": "judge_3",
+        "error": "Judge judge_3 encountered exception: Gemini API Key is required. Please set the GEMINI_API_KEY environment variable or pass api_key to the client."
+      },
+      {
+        "judge_id": "judge_4",
+        "error": "Judge judge_4 encountered exception: Gemini API Key is required. Please set the GEMINI_API_KEY environment variable or pass api_key to the client."
+      },
+      {
+        "judge_id": "judge_5",
+        "error": "Judge judge_5 encountered exception: Gemini API Key is required. Please set the GEMINI_API_KEY environment variable or pass api_key to the client."
+      }
+    ]
+  },
+  "candidate_extraction": {
+    "patient_full_name": "Arthur Pendelton Hayes",
+    "date_of_birth": "1961-04-14",
+    "medical_record_number": "MRN-7840192",
+    "accession_id": "ACC-2026-MCED-9184",
+    "ordering_physician": "Dr. Evelyn Montgomery, MD",
+    "cancer_signal_status": "SIGNAL DETECTED",
+    "primary_cancer_signal_origin": "Colorectal",
+    "primary_origin_probability": 0.84,
+    "estimated_tumor_fraction_pct": 3.8,
+    "detected_somatic_mutations": [
+      {
+        "gene": "KRAS",
+        "variant": "c.35G>A (p.Gly12Asp / G12D)",
+        "exon": "Exon 2",
+        "vaf_pct": "2.4%",
+        "tier": "Tier I - Pathogenic (Colorectal / GI Lineage)"
+      },
+      {
+        "gene": "APC",
+        "variant": "c.4348C>T (p.Arg1450Ter / R1450*)",
+        "exon": "Exon 16",
+        "vaf_pct": "3.1%",
+        "tier": "Tier I - Pathogenic (Truncating / Wnt Pathway)"
+      },
+      {
+        "gene": "TP53",
+        "variant": "c.818G>A (p.Arg273His / R273H)",
+        "exon": "Exon 8",
+        "vaf_pct": "1.9%",
+        "tier": "Tier I - Pathogenic (DNA Binding Domain)"
+      }
+    ],
+    "methylation_biomarkers": {
+      "sept9_index": 0.79,
+      "sdc2_index": 0.68,
+      "ndrg4_index": 0.72
+    },
+    "serum_carcinoembryonic_antigen_ng_ml": 12.4
+  },
+  "accepted_payload": {},
+  "exceptions": [
+    {
+      "field_name": "patient_full_name",
+      "status": "REJECTED",
+      "candidate_value": "Arthur Pendelton Hayes",
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "date_of_birth",
+      "status": "REJECTED",
+      "candidate_value": "1961-04-14",
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "medical_record_number",
+      "status": "REJECTED",
+      "candidate_value": "MRN-7840192",
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "accession_id",
+      "status": "REJECTED",
+      "candidate_value": "ACC-2026-MCED-9184",
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "ordering_physician",
+      "status": "REJECTED",
+      "candidate_value": "Dr. Evelyn Montgomery, MD",
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "cancer_signal_status",
+      "status": "REJECTED",
+      "candidate_value": "SIGNAL DETECTED",
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "primary_cancer_signal_origin",
+      "status": "REJECTED",
+      "candidate_value": "Colorectal",
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "primary_origin_probability",
+      "status": "REJECTED",
+      "candidate_value": 0.84,
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "estimated_tumor_fraction_pct",
+      "status": "REJECTED",
+      "candidate_value": 3.8,
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "detected_somatic_mutations",
+      "status": "REJECTED",
+      "candidate_value": [
+        {
+          "gene": "KRAS",
+          "variant": "c.35G>A (p.Gly12Asp / G12D)",
+          "exon": "Exon 2",
+          "vaf_pct": "2.4%",
+          "tier": "Tier I - Pathogenic (Colorectal / GI Lineage)"
+        },
+        {
+          "gene": "APC",
+          "variant": "c.4348C>T (p.Arg1450Ter / R1450*)",
+          "exon": "Exon 16",
+          "vaf_pct": "3.1%",
+          "tier": "Tier I - Pathogenic (Truncating / Wnt Pathway)"
+        },
+        {
+          "gene": "TP53",
+          "variant": "c.818G>A (p.Arg273His / R273H)",
+          "exon": "Exon 8",
+          "vaf_pct": "1.9%",
+          "tier": "Tier I - Pathogenic (DNA Binding Domain)"
+        }
+      ],
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "methylation_biomarkers",
+      "status": "REJECTED",
+      "candidate_value": {
+        "sept9_index": 0.79,
+        "sdc2_index": 0.68,
+        "ndrg4_index": 0.72
+      },
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    },
+    {
+      "field_name": "serum_carcinoembryonic_antigen_ng_ml",
+      "status": "REJECTED",
+      "candidate_value": 12.4,
+      "agreement_ratio": "0/0",
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "proposed_corrections": [],
+      "recommended_routing": "Flag for Extraction Failure / Resubmission"
+    }
+  ],
+  "consensus_breakdown": {
+    "patient_full_name": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "date_of_birth": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "medical_record_number": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "accession_id": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "ordering_physician": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "cancer_signal_status": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "primary_cancer_signal_origin": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "primary_origin_probability": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "estimated_tumor_fraction_pct": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "detected_somatic_mutations": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "methylation_biomarkers": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    },
+    "serum_carcinoembryonic_antigen_ng_ml": {
+      "agreement_count": 0,
+      "total_judges": 0,
+      "agreement_ratio": "0/0 (0%)",
+      "status": "REJECTED",
+      "confidence_band": "Quorum Failure (0 judges)",
+      "routing_action": "Flag for Extraction Failure / Resubmission"
+    }
+  },
+  "audit_trail": [
+    {
+      "field_name": "patient_full_name",
+      "candidate_value": "Arthur Pendelton Hayes",
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "date_of_birth",
+      "candidate_value": "1961-04-14",
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "medical_record_number",
+      "candidate_value": "MRN-7840192",
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "accession_id",
+      "candidate_value": "ACC-2026-MCED-9184",
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "ordering_physician",
+      "candidate_value": "Dr. Evelyn Montgomery, MD",
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "cancer_signal_status",
+      "candidate_value": "SIGNAL DETECTED",
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "primary_cancer_signal_origin",
+      "candidate_value": "Colorectal",
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "primary_origin_probability",
+      "candidate_value": 0.84,
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "estimated_tumor_fraction_pct",
+      "candidate_value": 3.8,
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "detected_somatic_mutations",
+      "candidate_value": [
+        {
+          "gene": "KRAS",
+          "variant": "c.35G>A (p.Gly12Asp / G12D)",
+          "exon": "Exon 2",
+          "vaf_pct": "2.4%",
+          "tier": "Tier I - Pathogenic (Colorectal / GI Lineage)"
+        },
+        {
+          "gene": "APC",
+          "variant": "c.4348C>T (p.Arg1450Ter / R1450*)",
+          "exon": "Exon 16",
+          "vaf_pct": "3.1%",
+          "tier": "Tier I - Pathogenic (Truncating / Wnt Pathway)"
+        },
+        {
+          "gene": "TP53",
+          "variant": "c.818G>A (p.Arg273His / R273H)",
+          "exon": "Exon 8",
+          "vaf_pct": "1.9%",
+          "tier": "Tier I - Pathogenic (DNA Binding Domain)"
+        }
+      ],
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "methylation_biomarkers",
+      "candidate_value": {
+        "sept9_index": 0.79,
+        "sdc2_index": 0.68,
+        "ndrg4_index": 0.72
+      },
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    },
+    {
+      "field_name": "serum_carcinoembryonic_antigen_ng_ml",
+      "candidate_value": 12.4,
+      "status": "REJECTED",
+      "agreement_count": 0,
+      "total_judges": 0,
+      "dissent_reasons": [
+        "All judge evaluations failed or timed out"
+      ],
+      "failure_modes": [
+        "UNREADABLE_SOURCE"
+      ],
+      "proposed_corrections": []
+    }
+  ]
+}
