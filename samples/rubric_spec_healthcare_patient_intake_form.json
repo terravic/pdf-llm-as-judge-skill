@@ -11,7 +11,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 1: PATIENT IDENTIFICATION",
-        "verification_criteria": "Must match the patient's legal name 'Eleanor Vance Sterling'. Do not accept 'Nora Sterling' as the legal name.",
+        "verification_criteria": "Must match the patient's legal name. Do not extract preferred nicknames or abbreviated names if legal name is present.",
         "failure_modes": [
           "PREFERRED_NAME_CONFUSED_WITH_LEGAL",
           "NAME_TRUNCATED",
@@ -28,7 +28,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 1: PATIENT IDENTIFICATION",
-        "verification_criteria": "Must match '1984-11-23'. Must not be confused with the Intake Date ('2026-09-08') or Coverage Effective Date ('2024-01-01').",
+        "verification_criteria": "Must match the patient's date of birth in YYYY-MM-DD format. Must not be confused with encounter/intake date, signature date, or coverage effective date.",
         "failure_modes": [
           "CONFUSED_WITH_ENCOUNTER_DATE",
           "FORMAT_MISMATCH",
@@ -46,7 +46,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 1: PATIENT IDENTIFICATION",
-        "verification_criteria": "Must match verbatim '987-65-4320'. Any transposition or altered digits must trigger a failure.",
+        "verification_criteria": "Must match verbatim the 9-digit Social Security Number from Section 1. Any digit transposition or altered numbers must trigger a failure.",
         "failure_modes": [
           "DIGIT_TRANSPOSITION",
           "HALLUCINATION",
@@ -68,7 +68,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 1: PATIENT IDENTIFICATION",
-        "verification_criteria": "Must be the patient's home address ('742 Evergreen Terrace, Apt 3B, St. Paul, MN 55102'). Crucial: Must NOT extract the facility address ('1200 Healthcare Blvd, Suite 400, Minneapolis, MN 55415').",
+        "verification_criteria": "Must extract the patient's residential home address. Crucial: Must NOT extract clinic, hospital, or provider facility address.",
         "failure_modes": [
           "FACILITY_ADDRESS_CONFUSED_AS_PATIENT",
           "MISSING_SUITE_OR_APT",
@@ -85,7 +85,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 2: PRIMARY INSURANCE DETAILS",
-        "verification_criteria": "Must extract the Member ID / Policy Number 'XMN-849201840-01'. Must NOT confuse with Group Number ('GRP-440912') or Payer ID ('BCBSMN-99201').",
+        "verification_criteria": "Must extract the primary insurance subscriber/member policy ID number. Must NOT confuse with Group Number, Payer ID, or Rx BIN numbers.",
         "failure_modes": [
           "CONFUSED_WITH_GROUP_NUMBER",
           "CONFUSED_WITH_PAYER_ID",
@@ -102,7 +102,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 3: CLINICAL REFERRAL & ATTENDING PHYSICIAN",
-        "verification_criteria": "Must extract the primary ICD-10 code 'C50.912'. Must not substitute the secondary code 'I10'.",
+        "verification_criteria": "Must extract the primary ICD-10 diagnosis code listed for the patient encounter. Must not substitute secondary, history, or rule-out diagnosis codes.",
         "failure_modes": [
           "SECONDARY_CODE_EXTRACTED_AS_PRIMARY",
           "INVALID_ICD_FORMAT",

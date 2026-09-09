@@ -11,7 +11,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "PATIENT IDENTIFICATION",
-        "verification_criteria": "Must match the patient's legal name 'Arthur Pendelton Hayes'. Do not accept the preferred name 'Art Hayes'.",
+        "verification_criteria": "Must match the patient's legal name from the Patient Identification section. Do not extract preferred nicknames or clinician names.",
         "failure_modes": [
           "PREFERRED_NAME_CONFUSED_WITH_LEGAL",
           "NAME_TRUNCATED",
@@ -28,7 +28,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "PATIENT IDENTIFICATION",
-        "verification_criteria": "Must match '1961-04-14'. Must not be confused with the Collection Date ('2026-08-14') or Report Date ('2026-08-18').",
+        "verification_criteria": "Must match the patient's date of birth in YYYY-MM-DD format. Must not be confused with specimen collection date, accession date, or report release date.",
         "failure_modes": [
           "CONFUSED_WITH_COLLECTION_DATE",
           "CONFUSED_WITH_REPORT_DATE",
@@ -45,7 +45,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "PATIENT IDENTIFICATION",
-        "verification_criteria": "Must match 'MRN-7840192'. Must not be confused with Accession ID ('ACC-2026-MCED-9184') or Physician NPI ('1487920153').",
+        "verification_criteria": "Must extract the Medical Record Number (MRN). Must not be confused with specimen Accession ID, requisition numbers, or physician NPI.",
         "failure_modes": [
           "CONFUSED_WITH_ACCESSION_NUMBER",
           "CONFUSED_WITH_NPI",
@@ -62,7 +62,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SPECIMEN & ORDER INFORMATION",
-        "verification_criteria": "Must match 'ACC-2026-MCED-9184'. Must not be confused with MRN or CAP accreditation numbers.",
+        "verification_criteria": "Must extract the unique laboratory specimen accession identifier from the Specimen & Order Information section. Must not be confused with MRN or lab license numbers.",
         "failure_modes": [
           "CONFUSED_WITH_MRN",
           "FORMAT_MISMATCH",
@@ -78,7 +78,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SPECIMEN & ORDER INFORMATION",
-        "verification_criteria": "Must extract 'Dr. Evelyn Montgomery, MD'. Must not confuse with Medical Director 'Marcus Vance, MD, PhD, FCAP'.",
+        "verification_criteria": "Must extract the ordering clinician's name and credentials from the order section. Must not confuse with laboratory medical director or reviewing pathologist.",
         "failure_modes": [
           "LAB_DIRECTOR_CONFUSED_AS_ORDERING_PHYSICIAN",
           "PHYSICIAN_NAME_TRUNCATED",
@@ -99,7 +99,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "OVERALL CANCER SIGNAL STATUS",
-        "verification_criteria": "Must be 'SIGNAL DETECTED' verbatim as displayed in the primary result banner.",
+        "verification_criteria": "Must extract the primary overall cancer signal result classification as stated in the primary result banner.",
         "failure_modes": [
           "INCORRECT_CLASSIFICATION",
           "HALLUCINATION",
@@ -115,7 +115,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "OVERALL CANCER SIGNAL STATUS",
-        "verification_criteria": "Must extract 'Colorectal' as the primary signal origin (CSO 1). Must NOT extract the secondary origin 'Upper GI / Gastric' as primary.",
+        "verification_criteria": "Must extract the primary predicted tissue of origin (CSO 1) with highest probability. Must NOT extract secondary or lower-probability signal origins as primary.",
         "failure_modes": [
           "SECONDARY_ORIGIN_CONFUSED_AS_PRIMARY",
           "HALLUCINATION",
@@ -135,7 +135,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "OVERALL CANCER SIGNAL STATUS",
-        "verification_criteria": "Must extract 0.84 (or 84%). Represents the prediction probability for Colorectal origin.",
+        "verification_criteria": "Must extract the numeric prediction probability for the primary cancer signal origin as a decimal between 0.0 and 1.0 (convert percentage to decimal if necessary).",
         "failure_modes": [
           "SECONDARY_PROBABILITY_EXTRACTED",
           "PERCENTAGE_NOT_CONVERTED_TO_DECIMAL",
@@ -155,7 +155,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "OVERALL CANCER SIGNAL STATUS",
-        "verification_criteria": "Must extract 3.8 representing the estimated circulating tumor fraction percentage (3.8% ctDNA).",
+        "verification_criteria": "Must extract the numeric estimated circulating tumor fraction percentage (ctDNA / cfDNA fraction) as a percentage number between 0.0 and 100.0.",
         "failure_modes": [
           "MUTATION_VAF_CONFUSED_AS_TUMOR_FRACTION",
           "DECIMAL_SHIFT",
@@ -178,7 +178,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 1: TARGETED SOMATIC GENOMIC ALTERATIONS",
-        "verification_criteria": "Must include all three detected pathogenic mutations (KRAS c.35G>A / p.G12D at 2.4% VAF, APC c.4348C>T / p.R1450* at 3.1% VAF, TP53 c.818G>A / p.R273H at 1.9% VAF). Non-detected genes (PIK3CA, BRAF) must not be listed as detected mutations.",
+        "verification_criteria": "Must extract array of all detected pathogenic somatic mutations with gene symbol, variant notation, exon, variant allele fraction (VAF %), and clinical tier. Non-detected genes must not be included.",
         "failure_modes": [
           "MISSING_DETECTED_MUTATION",
           "NEGATIVE_MARKER_REPORTED_AS_POSITIVE",
@@ -199,7 +199,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 2: EPIGENETIC METHYLATION PATTERNS & CIRCULATING PROTEIN MARKERS",
-        "verification_criteria": "Must extract sept9_index (0.79), sdc2_index (0.68), and ndrg4_index (0.72) from Section 2.",
+        "verification_criteria": "Must extract the epigenetic methylation biomarker score indexes for all target promoter regions from Section 2.",
         "failure_modes": [
           "CONFUSED_WITH_REFERENCE_BASELINE",
           "VALUE_TRANSPOSITION",
@@ -215,7 +215,7 @@
       },
       "semantic_grounding_rules": {
         "source_section": "SECTION 2: EPIGENETIC METHYLATION PATTERNS & CIRCULATING PROTEIN MARKERS",
-        "verification_criteria": "Must extract 12.4 representing the Serum Carcinoembryonic Antigen (CEA) value in ng/mL. Must NOT confuse with CA 19-9 (48.2) or AFP (4.1).",
+        "verification_criteria": "Must extract the quantitative Serum Carcinoembryonic Antigen (CEA) protein marker value in ng/mL. Must NOT confuse with other protein markers or baseline reference limits.",
         "failure_modes": [
           "CONFUSED_WITH_CA_19_9",
           "CONFUSED_WITH_AFP",
