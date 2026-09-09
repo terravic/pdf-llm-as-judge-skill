@@ -1,5 +1,5 @@
 ---
-name: pdf-extraction-consensus-evaluator
+name: pdf-llm-as-judge
 description: >-
   Extracts target data fields from PDF documents into structured JSON and validates each field using a parallel panel of five thinking LLM judges against a verification rubric, producing field-level consensus scores, routing decisions, audit trails, and interactive UI dashboards.
 ---

@@ -139,24 +139,35 @@ All sample files provided in the `samples/` directory are completely synthetic a
 - Python 3.10 or higher
 - `requests`, `pypdf`, `pyyaml`, `pytest`
 
-### Setup
+### Setup & Authentication
 
 1. Clone or copy the repository into your workspace:
    ```bash
    cd pdf-llm-as-judge-skill
    ```
 
-2. Authentication (choose either Google Cloud or Google AI Studio):
-   - **Google Cloud Vertex AI (Default / Enterprise)**:
+2. Choose your authentication method (Google Cloud Vertex AI or Google AI Studio):
+
+   #### Option A: Google Cloud Vertex AI (Default / Enterprise - No API Key Required)
+   If you have a Google Cloud project with Vertex AI enabled, you do not need an API key. Authenticate using Application Default Credentials (ADC):
+   ```bash
+   # Log in to Google Cloud ADC
+   gcloud auth application-default login
+   ```
+   - **Project Auto-Detection**: The client automatically detects your active GCP project from `gcloud config get-value project`, your ADC metadata, or `GOOGLE_CLOUD_PROJECT`.
+   - **Optional Environment Variables**:
      ```bash
-     gcloud auth application-default login
-     # Project ID is automatically detected from active gcloud config or GOOGLE_CLOUD_PROJECT
-     export GOOGLE_CLOUD_PROJECT="your-gcp-project-id" # optional if gcloud is configured
+     export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"   # Explicit project override
+     export GOOGLE_CLOUD_LOCATION="us-central1"          # Default region (us-central1)
      ```
-   - **Google AI Studio (Alternative)**:
-     ```bash
-     export GEMINI_API_KEY="your-gemini-api-key"
-     ```
+   - **Standalone Desktop Apps & Agent Environments**: Since ADC credentials are stored globally at `~/.config/gcloud/application_default_credentials.json`, standalone agent harnesses and background scripts automatically detect your credentials.
+
+   #### Option B: Google AI Studio (API Key)
+   If you prefer using Google AI Studio developer keys:
+   ```bash
+   export GEMINI_API_KEY="AIzaSy..."
+   ```
+   Alternatively, pass `--api-key AIzaSy...` directly to the CLI scripts.
 
 ---
 
@@ -222,46 +233,95 @@ pytest -v tests/
 
 ---
 
+## Non-Technical User Guide: How to Use This Skill
+
+This skill allows anyone to extract and automatically verify data from complex PDF documents (such as medical reports, insurance claims, or intake forms) without writing code.
+
+### How It Works in Plain Language
+
+1. **Extraction**: An AI model reads the PDF document and extracts the required fields based on rules defined in a rubric file.
+2. **5-Judge Verification**: A panel of five independent AI judges simultaneously verifies each extracted value against the original visual PDF pages and validation rules.
+3. **Consensus & Routing**: The system calculates how many judges agree on each field:
+   - **Unanimous / Majority (4/5 or 5/5 passes)**: The data is verified as accurate and accepted automatically.
+   - **Contested (3/5 passes)**: The judges had mixed opinions; the field is flagged for a human to review.
+   - **Rejected (2/5 or fewer passes)**: The extraction was inaccurate, unreadable, or violated rules; the field is flagged for resubmission.
+4. **Visual Dashboard**: An interactive HTML dashboard (`ui/index.html`) is generated, displaying the PDF pages, the extracted data, and the judge reasoning side-by-side.
+
+---
+
+### Step-by-Step Instructions
+
+1. **Locate or Prepare Your Files**:
+   - Have your PDF document available (for example, `samples/healthcare_patient_intake_form.pdf` or `samples/cancer_screening_lab_report.pdf`).
+   - Have the matching rubric JSON file available (for example, `samples/rubric_spec_healthcare_patient_intake_form.json` or `samples/rubric_spec_cancer_screening_lab_report.json`).
+
+2. **Send a Request in the Chat**:
+   Type the slash command or a plain English request referencing the file paths:
+   ```text
+   /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
+   ```
+
+3. **Review the Results in the UI Dashboard**:
+   Open `ui/index.html` in your web browser. You can navigate through five tabs to inspect the original PDF, review the candidate extraction, see each judge's reasoning and citations, and copy the clean validated data.
+
+---
+
 ## Using the Skill in an Agent Harness
 
 This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`) compatible with modern AI agent harnesses, orchestration frameworks, and interactive UI dashboards.
 
-### Step-by-Step Instructions for Non-Technical Users
+### Invocation & Best Practices
 
-1. **Provide Input Files**: Place your source PDF and corresponding rubric JSON file into an accessible directory (such as `samples/` or your workspace folder).
-2. **Send Prompt in Chat**: Instruct the agent in natural language to process the PDF using the rubric and run the 5-judge consensus evaluator.
-3. **Review Extracted Results & UI Dashboard**: The agent runs the pipeline and outputs:
-   - High-confidence accepted fields that achieved 5/5 or 4/5 judge consensus.
-   - Any contested fields (3/5 split verdicts) or rejected fields (<= 2/5 passes) with specific judge justifications and page citations.
-   - A clickable link or embedded view for the interactive UI Dashboard (`ui/index.html`).
+1. **Invoke via Slash Command or Prompt**:
+   You can invoke the skill directly using the registered slash command:
+   ```text
+   /pdf-llm-as-judge <PATH_TO_PDF> <PATH_TO_RUBRIC_JSON>
+   ```
+
+2. **Always Reference File Paths Directly (Avoid Uploading JSON Attachments)**:
+   > [!IMPORTANT]
+   > **Provide file paths directly in your prompt text** (e.g., `samples/cancer_screening_lab_report.pdf` and `samples/rubric_spec_cancer_screening_lab_report.json`).
+   > Do **not** attach or upload the `.json` rubric file as a chat media attachment. Vertex AI and Gemini APIs do not support `application/json` as an `inlineData` media attachment type and will return `HTTP 400 Bad Request`.
+
+3. **Customizing Models & Judge Parameters**:
+   You can customize the models used for extraction and judging directly in your prompt or command:
+   - **`--extractor-model`**: Stage 1 Primary Extraction model (default: `gemini-3.8-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
+   - **`--judge-model`**: Stage 2 Judge Panel model (default: `gemini-3.6-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
+   - **`--thinking-budget`**: Number of reasoning tokens per judge (default: `2048`, alternatives: `1024`, `4096`, `8192`).
+   - **`--num-judges`**: Number of concurrent judges in the panel (default: `5`, alternatives: `3`, `7`).
 
 ---
 
-### Prompt Examples for Agent Harnesses
+### Sample Prompts for Agent Harnesses
 
-#### Example 1: Full Extraction and Verification for Healthcare Intake Form
-```
-Extract all patient and insurance fields from samples/healthcare_patient_intake_form.pdf using the rubric criteria in samples/rubric_spec_healthcare_patient_intake_form.json. Run the 5-judge consensus evaluator, output the summary report to output/intake_report.json, and generate the UI dashboard at ui/index.html.
-```
-
-#### Example 2: Molecular Diagnostics & Cancer Screening Lab Report Extraction
-```
-Process the oncology lab report in samples/cancer_screening_lab_report.pdf using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the parallel 5x thinking judge panel to verify somatic mutations (KRAS, APC, TP53), epigenetic methylation indexes, and circulating tumor fraction. Generate the consensus report and interactive dashboard.
+#### 1. Cancer Screening Lab Report (Default Models)
+```text
+/pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json
 ```
 
-#### Example 3: Verifying a Pre-Extracted Candidate JSON Payload
-```
-I already have candidate extraction data in samples/expected_candidate_healthcare_patient_intake_form.json. Please evaluate this extraction against samples/healthcare_patient_intake_form.pdf using the rubric samples/rubric_spec_healthcare_patient_intake_form.json. Run the 5-judge panel to detect any hallucinated fields or transposition errors and show the consensus matrix in the UI dashboard.
-```
-
-#### Example 4: Automatic Rubric Formulation from Unstructured Guidelines
-```
-I have a new document type in samples/cancer_screening_lab_report.pdf. First, create a structured JSON rubric specification covering patient demographics, accession numbers, cancer signal status, somatic mutations, and methylation markers based on the document layout. Then, execute the 5-judge consensus extraction pipeline and display the results in ui/index.html.
+#### 2. Healthcare Intake Form (Default Models)
+```text
+/pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
 ```
 
-#### Example 5: Resolving Split Verdicts (Human-in-the-Loop Review)
+#### 3. Custom Model Selection (Explicit Flash & Pro Pairing)
+```text
+/pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-3.8-flash --judge-model gemini-3.6-flash --thinking-budget 2048
 ```
-Analyze the contested fields from the last run in output/extraction_report.json where the judges had a split verdict (3/5 passes). List the specific dissenting justifications and proposed corrections for each contested field so I can confirm the correct value.
+
+#### 4. High-Reasoning Deep Evaluation (Higher Thinking Budget)
+```text
+/pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-2.5-pro --judge-model gemini-2.5-pro --thinking-budget 4096 --num-judges 5
+```
+
+#### 5. Natural Language Prompt with Output Specification
+```text
+Extract all clinical and demographic fields from samples/cancer_screening_lab_report.pdf using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.6-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at ui/index.html.
+```
+
+#### 6. Evaluating Pre-Extracted Candidate JSON
+```text
+/pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json --candidate-json samples/expected_candidate_healthcare_patient_intake_form.json
 ```
 
 ---

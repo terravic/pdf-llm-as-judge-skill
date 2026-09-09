@@ -4,7 +4,7 @@
   "description": "Multi-Agent PDF Extraction and Consensus Evaluator Plugin with 5x LLM Judges",
   "skills": [
     {
-      "name": "pdf-extraction-consensus-evaluator",
+      "name": "pdf-llm-as-judge",
       "path": "SKILL.md"
     }
   ]
