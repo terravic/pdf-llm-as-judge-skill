@@ -209,6 +209,9 @@ class PipelineReport:
     exceptions: List[Dict[str, Any]]
     consensus_breakdown: Dict[str, Any]
     audit_trail: List[Dict[str, Any]]
+    extractor_model: str = "gemini-3.8-flash"
+    judge_model: str = "gemini-3.6-flash"
+    thinking_budget: int = 2048
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)

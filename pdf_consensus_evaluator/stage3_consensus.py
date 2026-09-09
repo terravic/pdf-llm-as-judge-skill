@@ -155,8 +155,17 @@ class ConsensusEngine:
         rubric: RubricSpec,
         candidate_extraction: Dict[str, Any],
         judge_reports: List[JudgeReport],
+        extractor_model: str = "gemini-3.8-flash",
+        judge_model: Optional[str] = None,
+        thinking_budget: Optional[int] = None,
     ) -> PipelineReport:
         """Aggregates all field evaluations into a consolidated PipelineReport."""
+        if judge_model is None and judge_reports:
+            judge_model = judge_reports[0].model_name
+        if thinking_budget is None and judge_reports:
+            thinking_budget = judge_reports[0].thinking_budget
+        resolved_judge_model = judge_model or "gemini-3.6-flash"
+        resolved_thinking_budget = thinking_budget if thinking_budget is not None else 2048
         target_fields = [c.field_name for c in rubric.extraction_criteria]
         # Include any extra keys present in candidate extraction
         all_field_names = list(
@@ -247,6 +256,9 @@ class ConsensusEngine:
             exceptions=exceptions,
             consensus_breakdown=consensus_breakdown,
             audit_trail=audit_trail,
+            extractor_model=extractor_model,
+            judge_model=resolved_judge_model,
+            thinking_budget=resolved_thinking_budget,
         )
 
         return report

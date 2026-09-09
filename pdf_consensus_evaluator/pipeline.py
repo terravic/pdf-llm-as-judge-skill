@@ -76,6 +76,9 @@ class ExtractionConsensusPipeline:
             rubric=rubric,
             candidate_extraction=candidate,
             judge_reports=judge_reports,
+            extractor_model=self.stage1.model,
+            judge_model=self.stage2.model,
+            thinking_budget=self.stage2.thinking_budget,
         )
 
         logger.info(

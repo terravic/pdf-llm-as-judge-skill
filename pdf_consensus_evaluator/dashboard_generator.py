@@ -74,6 +74,11 @@ def _build_html_template(
     rubric_json_escaped = json.dumps(rubric)
     pdf_b64_escaped = json.dumps(pdf_b64)
 
+    extractor_model = report.get("extractor_model") or "gemini-3.8-flash"
+    judge_model = report.get("judge_model") or "gemini-3.6-flash"
+    thinking_budget = report.get("thinking_budget") if report.get("thinking_budget") is not None else 2048
+    requested_judges = report.get("quorum_metadata", {}).get("requested_judges", 5)
+
     return f"""<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -666,11 +671,11 @@ def _build_html_template(
         </div>
         <div class="meta-item">
           <span class="meta-label">Primary Extractor</span>
-          <span class="meta-value">Gemini 3.8 Flash (Budget: 0)</span>
+          <span class="meta-value">{extractor_model} (Budget: 0)</span>
         </div>
         <div class="meta-item">
           <span class="meta-label">Judge Panel</span>
-          <span class="meta-value">5x Gemini 3.6 Flash (Thinking: 2048+)</span>
+          <span class="meta-value">{requested_judges}x {judge_model} (Thinking: {thinking_budget})</span>
         </div>
         <div class="meta-item">
           <span class="meta-label">Execution Time</span>
@@ -776,7 +781,7 @@ def _build_html_template(
           </div>
           <table class="data-table">
             <tbody>
-              <tr><td style="font-weight: 600;">Engine Model</td><td>gemini-3.8-flash</td></tr>
+              <tr><td style="font-weight: 600;">Engine Model</td><td>{extractor_model}</td></tr>
               <tr><td style="font-weight: 600;">Thinking Budget</td><td>0 (Explicitly Disabled)</td></tr>
               <tr><td style="font-weight: 600;">Sampling Temperature</td><td>0.1 (Low Variance Determinism)</td></tr>
               <tr><td style="font-weight: 600;">Response Format</td><td>Strict JSON Schema</td></tr>
@@ -793,10 +798,10 @@ def _build_html_template(
         <div class="panel-header">
           <div class="panel-title">
             <svg class="icon" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87"></path><path d="M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-            Parallel LLM-as-a-Judge Panel (5 Concurrent Thinkers)
+            Parallel LLM-as-a-Judge Panel ({requested_judges} Concurrent Thinkers)
           </div>
           <div style="font-size: 0.8125rem; color: var(--text-muted);">
-            Model: Gemini 3.6 Flash | Thinking Budget: 2048 Tokens | Asynchronous Execution
+            Model: {judge_model} | Thinking Budget: {thinking_budget} Tokens | Asynchronous Execution
           </div>
         </div>
         <div class="judges-grid" id="judges-grid-container">
@@ -950,14 +955,17 @@ def _build_html_template(
       const grid = document.getElementById("judges-grid-container");
       grid.innerHTML = "";
 
-      for (let j = 1; j <= 5; j++) {{
+      const numJudges = (report.quorum_metadata && report.quorum_metadata.requested_judges) || 5;
+      const thinkingBudget = report.thinking_budget !== undefined ? report.thinking_budget : 2048;
+
+      for (let j = 1; j <= numJudges; j++) {{
         const col = document.createElement("div");
         col.className = "judge-column";
 
         col.innerHTML = `
           <div class="judge-col-header">
             <span class="judge-name">Judge #${{j}}</span>
-            <span class="stat-badge badge-purple">Thinking: 2048</span>
+            <span class="stat-badge badge-purple">Thinking: ${{thinkingBudget}}</span>
           </div>
         `;
 
