@@ -237,3 +237,52 @@ def test_cancer_screening_pipeline_e2e(mock_gen, tmp_path):
     )
     assert out_html.exists()
 
+
+@patch("pdf_consensus_evaluator.gemini_client.GeminiClient.generate_content", side_effect=mock_generate_content_dispatcher)
+def test_cli_automatic_dashboard(mock_gen, tmp_path, monkeypatch):
+    """Tests that CLI automatically generates HTML dashboard based on output json path."""
+    from pdf_consensus_evaluator.cli import main
+
+    out_json = tmp_path / "output_report.json"
+    expected_dash = tmp_path / "output_report_dashboard.html"
+
+    test_args = [
+        "cli.py",
+        "--pdf", SAMPLE_PDF_PATH,
+        "--rubric", SAMPLE_RUBRIC_PATH,
+        "--output", str(out_json),
+        "--api-key", "mock-key",
+    ]
+    monkeypatch.setattr("sys.argv", test_args)
+
+    ret = main()
+    assert ret == 0
+    assert out_json.exists()
+    assert expected_dash.exists()
+    assert expected_dash.stat().st_size > 5000
+
+
+@patch("pdf_consensus_evaluator.gemini_client.GeminiClient.generate_content", side_effect=mock_generate_content_dispatcher)
+def test_cli_no_dashboard(mock_gen, tmp_path, monkeypatch):
+    """Tests that --no-dashboard flag disables HTML dashboard generation."""
+    from pdf_consensus_evaluator.cli import main
+
+    out_json = tmp_path / "output_report_headless.json"
+    expected_dash = tmp_path / "output_report_headless_dashboard.html"
+
+    test_args = [
+        "cli.py",
+        "--pdf", SAMPLE_PDF_PATH,
+        "--rubric", SAMPLE_RUBRIC_PATH,
+        "--output", str(out_json),
+        "--no-dashboard",
+        "--api-key", "mock-key",
+    ]
+    monkeypatch.setattr("sys.argv", test_args)
+
+    ret = main()
+    assert ret == 0
+    assert out_json.exists()
+    assert not expected_dash.exists()
+
+

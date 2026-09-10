@@ -65,7 +65,7 @@ Check that the required input files exist:
 If a custom rubric is not supplied, inspect the document and construct a rubric specification adhering to the format defined in the samples.
 
 ### Step 3: Execute the Pipeline and Generate Dashboard
-Run the pipeline runner script specifying both JSON output and UI dashboard output. By default, the pipeline uses `gemini-3.8-flash` for extraction and `gemini-3.6-flash` for the 5-judge panel. Custom models can be passed via `--extractor-model` and `--judge-model`:
+Run the pipeline runner script specifying JSON output and UI dashboard output. The CLI automatically defaults the interactive HTML dashboard path (e.g., `<output_stem>_dashboard.html` or `ui/index.html`) if `--dashboard` is omitted. By default, the pipeline uses `gemini-3.8-flash` for extraction and `gemini-3.6-flash` for the 5-judge panel. Custom models can be passed via `--extractor-model` and `--judge-model`:
 
 ```bash
 python3 scripts/run_pipeline.py \
@@ -98,12 +98,19 @@ python3 scripts/evaluate_candidate.py \
   --dashboard ui/index.html
 ```
 
-### Step 4: Interpret Output and Present Dashboard
+### Step 4: Emit Dashboard Artifact for Agent Harness (Antigravity)
+When running within an agent harness like Antigravity:
+1. **Interactive Artifact Delivery**: After the pipeline generates the standalone dashboard HTML file (e.g., `ui/index.html` or `output/<stem>_dashboard.html`), the agent **MUST** write/copy this HTML as a user-facing artifact named `dashboard.html` using `write_to_file` with:
+   - `TargetFile`: `<artifact_dir>/dashboard.html` or `dashboard.html`
+   - `ArtifactMetadata`: `{ "UserFacing": true, "Summary": "Interactive Multi-Agent Consensus Evaluation Dashboard", "RequestFeedback": false }`
+2. **Direct Visual Display**: By producing this artifact, Antigravity immediately opens and renders the interactive HTML dashboard directly in its right-side source/preview pane, eliminating the need to copy paths or open external browser tabs.
+
+### Step 5: Interpret Output and Present Summary
 Read the generated output JSON and present a clear summary:
 1. **Accepted Fields**: List all fields that attained unanimous or majority consensus along with their extracted values.
 2. **Contested Fields (HITL)**: Highlight fields that received split verdicts (e.g., 3/5 passes). Present the candidate value, the specific dissent reasons from the judges, and any proposed corrections for user confirmation.
 3. **Rejected Fields**: Highlight fields that failed verification (<= 2/5 passes), cite the detected failure modes (e.g., `FORMAT_MISMATCH`, `HALLUCINATION`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`), and list the judge justifications.
-4. **UI Dashboard Link**: Provide a link to the generated [ui/index.html](ui/index.html) dashboard.
+4. **UI Dashboard Link & Artifact Notice**: Provide a clickable markdown link to the generated dashboard file (e.g., [ui/index.html](ui/index.html) or [output/extraction_report_dashboard.html](output/extraction_report_dashboard.html)) and note that the interactive dashboard is also rendered in the right preview pane.
 
 ---
 

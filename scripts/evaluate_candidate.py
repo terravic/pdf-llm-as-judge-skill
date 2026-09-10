@@ -29,7 +29,17 @@ def parse_args():
         help="Path to candidate extraction JSON",
     )
     parser.add_argument("--output", type=str, default=None, help="Output report path")
-    parser.add_argument("--dashboard", type=str, default=None, help="Output HTML UI Dashboard path")
+    parser.add_argument(
+        "--dashboard",
+        type=str,
+        default=None,
+        help="Path to generate self-contained HTML UI Dashboard (defaults to <output_stem>_dashboard.html or ui/index.html)",
+    )
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="Disable automatic HTML UI Dashboard generation",
+    )
     parser.add_argument("--api-key", type=str, default=None, help="Gemini API Key")
     parser.add_argument(
         "--judge-model",
@@ -97,15 +107,27 @@ def main():
     else:
         print(json_str)
 
-    if args.dashboard:
+    dashboard_path = None
+    if not args.no_dashboard:
+        if args.dashboard:
+            dashboard_path = args.dashboard
+        elif args.output:
+            if args.output.endswith(".json"):
+                dashboard_path = args.output[:-5] + "_dashboard.html"
+            else:
+                dashboard_path = f"{args.output}_dashboard.html"
+        else:
+            dashboard_path = "ui/index.html"
+
+    if dashboard_path:
         from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html
         generate_dashboard_html(
             report=report,
             pdf_path=args.pdf,
             rubric=rubric,
-            output_html_path=args.dashboard,
+            output_html_path=dashboard_path,
         )
-        logger.info("UI Dashboard saved to: %s", args.dashboard)
+        logger.info("Interactive UI Dashboard saved to: %s", dashboard_path)
 
     return 0
 

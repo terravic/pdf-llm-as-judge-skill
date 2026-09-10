@@ -54,7 +54,12 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "--dashboard",
         type=str,
         default=None,
-        help="Path to generate self-contained HTML UI Dashboard",
+        help="Path to generate self-contained HTML UI Dashboard (defaults to <output_stem>_dashboard.html or ui/index.html)",
+    )
+    parser.add_argument(
+        "--no-dashboard",
+        action="store_true",
+        help="Disable automatic HTML UI Dashboard generation",
     )
     parser.add_argument(
         "--api-key",
@@ -158,15 +163,27 @@ def main() -> int:
     else:
         print(json_output)
 
-    if args.dashboard:
+    dashboard_path = None
+    if not args.no_dashboard:
+        if args.dashboard:
+            dashboard_path = args.dashboard
+        elif args.output:
+            if args.output.endswith(".json"):
+                dashboard_path = args.output[:-5] + "_dashboard.html"
+            else:
+                dashboard_path = f"{args.output}_dashboard.html"
+        else:
+            dashboard_path = "ui/index.html"
+
+    if dashboard_path:
         from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html
         generate_dashboard_html(
             report=report,
             pdf_path=args.pdf,
             rubric=rubric,
-            output_html_path=args.dashboard,
+            output_html_path=dashboard_path,
         )
-        logger.info("UI Dashboard saved to: %s", args.dashboard)
+        logger.info("Interactive UI Dashboard saved to: %s", dashboard_path)
 
     # Print summary table
     print("\n--- Pipeline Summary ---")
