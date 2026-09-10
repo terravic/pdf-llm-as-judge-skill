@@ -212,9 +212,11 @@ class PipelineReport:
     extractor_model: str = "gemini-3.8-flash"
     judge_model: str = "gemini-3.6-flash"
     thinking_budget: int = 2048
+    judge_reports: List[Dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
 
     def to_json(self, indent: int = 2) -> str:
         return json.dumps(self.to_dict(), indent=indent, default=str)
+

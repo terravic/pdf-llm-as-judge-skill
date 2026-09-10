@@ -233,6 +233,29 @@ class ConsensusEngine:
 
         valid_judges_count = sum(1 for r in judge_reports if r.error is None)
 
+        judge_reports_data = [
+            {
+                "judge_id": r.judge_id,
+                "model_name": r.model_name,
+                "thinking_budget": r.thinking_budget,
+                "execution_time_seconds": round(r.execution_time_seconds, 2),
+                "error": r.error,
+                "evaluations": [
+                    {
+                        "field_name": ev.field_name,
+                        "syntactic_check": ev.syntactic_check.value if hasattr(ev.syntactic_check, "value") else str(ev.syntactic_check),
+                        "grounding_check": ev.grounding_check.value if hasattr(ev.grounding_check, "value") else str(ev.grounding_check),
+                        "verdict": ev.verdict.value if hasattr(ev.verdict, "value") else str(ev.verdict),
+                        "failure_mode": ev.failure_mode,
+                        "justification": ev.justification,
+                        "proposed_correction": ev.proposed_correction,
+                    }
+                    for ev in r.evaluations
+                ],
+            }
+            for r in judge_reports
+        ]
+
         report = PipelineReport(
             document_type=rubric.document_type,
             rubric_version=rubric.rubric_version,
@@ -259,6 +282,8 @@ class ConsensusEngine:
             extractor_model=extractor_model,
             judge_model=resolved_judge_model,
             thinking_budget=resolved_thinking_budget,
+            judge_reports=judge_reports_data,
         )
 
         return report
+
