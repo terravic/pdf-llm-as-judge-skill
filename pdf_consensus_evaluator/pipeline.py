@@ -43,19 +43,26 @@ class ExtractionConsensusPipeline:
 
     async def run_async(
         self,
-        pdf_path: str,
-        rubric: RubricSpec,
+        document_path: Optional[str] = None,
+        rubric: Optional[RubricSpec] = None,
         candidate_extraction: Optional[Dict[str, Any]] = None,
+        pdf_path: Optional[str] = None,
     ) -> PipelineReport:
         """Asynchronously executes the end-to-end pipeline."""
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"PDF document not found: {pdf_path}")
+        target_path = document_path or pdf_path
+        if not target_path:
+            raise ValueError("document_path or pdf_path must be provided")
+        if rubric is None:
+            raise ValueError("rubric must be provided")
+
+        if not os.path.exists(target_path):
+            raise FileNotFoundError(f"Source document not found: {target_path}")
 
         # Primary Multimodal Extraction
         if candidate_extraction is None:
-            logger.info("Executing Primary Multimodal Extraction...")
+            logger.info("Executing Primary Multimodal Extraction on %s...", target_path)
             candidate = await self.stage1.extract_async(
-                pdf_path=pdf_path,
+                document_path=target_path,
                 rubric=rubric,
             )
         else:
@@ -65,7 +72,7 @@ class ExtractionConsensusPipeline:
         # Parallel Judge Panel (5x Concurrent Thinking LLM Judges)
         logger.info("Executing Parallel 5x Thinking Judge Panel...")
         judge_reports = await self.stage2.evaluate_panel_async(
-            pdf_path=pdf_path,
+            document_path=target_path,
             rubric=rubric,
             candidate_extraction=candidate,
         )
@@ -93,14 +100,15 @@ class ExtractionConsensusPipeline:
 
     def run(
         self,
-        pdf_path: str,
-        rubric: RubricSpec,
+        document_path: Optional[str] = None,
+        rubric: Optional[RubricSpec] = None,
         candidate_extraction: Optional[Dict[str, Any]] = None,
+        pdf_path: Optional[str] = None,
     ) -> PipelineReport:
         """Synchronous wrapper for pipeline execution."""
         return asyncio.run(
             self.run_async(
-                pdf_path=pdf_path,
+                document_path=document_path or pdf_path,
                 rubric=rubric,
                 candidate_extraction=candidate_extraction,
             )

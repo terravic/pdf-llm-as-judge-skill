@@ -13,15 +13,21 @@ from pdf_consensus_evaluator.models import PipelineReport, RubricSpec
 
 def generate_dashboard_html(
     report: PipelineReport,
-    pdf_path: Optional[str] = None,
+    document_path: Optional[str] = None,
     rubric: Optional[RubricSpec] = None,
     output_html_path: Optional[str] = None,
+    pdf_path: Optional[str] = None,
 ) -> str:
     """Generates a self-contained, fully pre-rendered, interactive HTML Dashboard."""
-    pdf_b64 = ""
-    if pdf_path and os.path.exists(pdf_path):
-        with open(pdf_path, "rb") as f:
-            pdf_b64 = base64.b64encode(f.read()).decode("utf-8")
+    target_path = document_path or pdf_path
+    doc_b64 = ""
+    mime_type = "application/pdf"
+
+    if target_path and os.path.exists(target_path):
+        from pdf_consensus_evaluator.gemini_client import GeminiClient
+        mime_type = GeminiClient.detect_mime_type(target_path)
+        with open(target_path, "rb") as f:
+            doc_b64 = base64.b64encode(f.read()).decode("utf-8")
 
     rubric_data: Dict[str, Any] = {}
     if rubric:
@@ -53,7 +59,8 @@ def generate_dashboard_html(
 
     html_content = _build_html_template(
         report=report_data,
-        pdf_b64=pdf_b64,
+        doc_b64=doc_b64,
+        mime_type=mime_type,
         rubric=rubric_data,
     )
 
@@ -69,12 +76,16 @@ def generate_dashboard_html(
 
 def _build_html_template(
     report: Dict[str, Any],
-    pdf_b64: str,
+    doc_b64: str,
+    mime_type: str,
     rubric: Dict[str, Any],
 ) -> str:
     report_json_escaped = json.dumps(report)
     rubric_json_escaped = json.dumps(rubric)
-    pdf_b64_escaped = json.dumps(pdf_b64)
+    doc_b64_escaped = json.dumps(doc_b64)
+    mime_type_escaped = json.dumps(mime_type)
+
+    is_image = mime_type.startswith("image/")
 
     extractor_model = html.escape(str(report.get("extractor_model") or "gemini-3.8-flash"))
     judge_model = html.escape(str(report.get("judge_model") or "gemini-3.6-flash"))
@@ -111,7 +122,41 @@ def _build_html_template(
     full_audit_json_html = html.escape(full_audit_json_str)
     audit_trail_table_html = _render_audit_trail_table_html(report)
 
-    pdf_embed_tag = f'<iframe class="pdf-embed-fallback" id="pdf-embed-frame" style="display: none;" src="data:application/pdf;base64,{pdf_b64}"></iframe>' if pdf_b64 else '<div style="padding: 2rem; color: var(--text-muted); font-size: 0.875rem;">No embedded PDF stream provided.</div>'
+    modality_display = f"Multimodal Inline Image ({mime_type})" if is_image else "Multimodal Inline PDF (application/pdf)"
+    brand_title_text = "Multi-Agent Image Extraction & Consensus Evaluator" if is_image else "Multi-Agent PDF Extraction & Consensus Evaluator"
+    tab1_title = "1. Image &amp; Rubric Inspector" if is_image else "1. PDF &amp; Rubric Inspector"
+    viewer_header_title = f"Multimodal Source Image Viewer ({mime_type})" if is_image else "Multimodal Source PDF Viewer"
+
+    if is_image:
+        viewer_controls_html = """
+              <button class="btn btn-icon" id="zoom-in" title="Zoom In">+</button>
+              <button class="btn btn-icon" id="zoom-out" title="Zoom Out">-</button>
+              <button class="btn" id="zoom-reset" style="padding: 0.25rem 0.5rem; font-size: 0.75rem;" title="Reset Zoom">Reset</button>
+        """
+        viewer_body_html = f"""
+            <div id="image-wrapper" style="text-align: center; max-width: 100%; transition: transform 0.15s ease; transform-origin: top center; padding: 0.5rem;">
+              <img id="source-doc-image" src="data:{mime_type};base64,{doc_b64}" alt="Source Document" style="max-width: 100%; height: auto; border-radius: 0.375rem; box-shadow: var(--card-shadow-lg);" />
+            </div>
+        """ if doc_b64 else '<div style="padding: 2rem; color: var(--text-muted); font-size: 0.875rem;">No embedded image stream provided.</div>'
+    else:
+        viewer_controls_html = """
+              <button class="btn btn-icon" id="prev-page" title="Previous Page">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
+              </button>
+              <span id="page-num-display" style="font-size: 0.8125rem; font-weight: 600;">Page 1</span>
+              <button class="btn btn-icon" id="next-page" title="Next Page">
+                <svg class="icon" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
+              </button>
+              <button class="btn btn-icon" id="zoom-in" title="Zoom In">+</button>
+              <button class="btn btn-icon" id="zoom-out" title="Zoom Out">-</button>
+        """
+        pdf_embed_fallback = f'<iframe class="pdf-embed-fallback" id="pdf-embed-frame" style="display: none;" src="data:application/pdf;base64,{doc_b64}"></iframe>' if doc_b64 else ''
+        viewer_body_html = f"""
+            <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
+              <canvas id="pdf-canvas"></canvas>
+            </div>
+            {pdf_embed_fallback}
+        """ if doc_b64 else '<div style="padding: 2rem; color: var(--text-muted); font-size: 0.875rem;">No embedded PDF stream provided.</div>'
 
 
     return f"""<!DOCTYPE html>
@@ -764,7 +809,7 @@ def _build_html_template(
         </svg>
       </div>
       <div>
-        <div class="brand-title">Multi-Agent PDF Extraction & Consensus Evaluator</div>
+        <div class="brand-title">{brand_title_text}</div>
         <div class="brand-subtitle">5x Thinking LLM Judge Ensemble • Grounding & Consensus Verification</div>
       </div>
     </div>
@@ -776,7 +821,7 @@ def _build_html_template(
         </svg>
         <svg id="theme-icon-sun" class="icon" style="display: none;" viewBox="0 0 24 24">
           <circle cx="12" cy="12" r="5"></circle>
-          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="12" x2="12" y2="3"></line>
           <line x1="12" y1="21" x2="12" y2="23"></line>
           <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
           <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
@@ -838,7 +883,7 @@ def _build_html_template(
         <div class="stat-value" style="color: var(--accent-green);">{accepted_fields}</div>
         <div class="stat-badge badge-green">
           <svg class="icon" viewBox="0 0 24 24"><polyline points="20 6 9 17 4 12"></polyline></svg>
-          Unanimous / Majority (>=80%)
+          Unanimous / Majority (&gt;=80%)
         </div>
       </div>
       <div class="stat-card">
@@ -862,7 +907,7 @@ def _build_html_template(
     <nav class="nav-tabs" role="tablist">
       <button class="nav-tab active" data-tab="tab-pdf-rubric">
         <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-        1. PDF &amp; Rubric Inspector
+        {tab1_title}
       </button>
       <button class="nav-tab" data-tab="tab-extraction">
         <svg class="icon" viewBox="0 0 24 24"><path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"></path><polyline points="13 2 13 9 20 9"></polyline></svg>
@@ -882,32 +927,21 @@ def _build_html_template(
       </button>
     </nav>
 
-    <!-- TAB 1: PDF & Rubric Inspector -->
+    <!-- TAB 1: Document & Rubric Inspector -->
     <div id="tab-pdf-rubric" class="tab-panel active">
       <div class="split-layout">
         <div class="panel-card">
           <div class="panel-header">
             <div class="panel-title">
               <svg class="icon" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline></svg>
-              Multimodal Source PDF Viewer
+              {viewer_header_title}
             </div>
             <div class="pdf-controls">
-              <button class="btn btn-icon" id="prev-page" title="Previous Page">
-                <svg class="icon" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-              </button>
-              <span id="page-num-display" style="font-size: 0.8125rem; font-weight: 600;">Page 1</span>
-              <button class="btn btn-icon" id="next-page" title="Next Page">
-                <svg class="icon" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
-              </button>
-              <button class="btn btn-icon" id="zoom-in" title="Zoom In">+</button>
-              <button class="btn btn-icon" id="zoom-out" title="Zoom Out">-</button>
+              {viewer_controls_html}
             </div>
           </div>
           <div class="pdf-viewer-container" id="pdf-container">
-            <div class="pdf-canvas-wrapper" id="pdf-canvas-wrapper">
-              <canvas id="pdf-canvas"></canvas>
-            </div>
-            {pdf_embed_tag}
+            {viewer_body_html}
           </div>
         </div>
 
@@ -956,12 +990,12 @@ def _build_html_template(
               <tr><td style="font-weight: 600;">Thinking Tokens Budget</td><td><code>0 tokens</code> (Explicitly disabled for high-throughput)</td></tr>
               <tr><td style="font-weight: 600;">Sampling Temperature</td><td><code>0.10</code> (Low-variance deterministic schema extraction)</td></tr>
               <tr><td style="font-weight: 600;">Response Format</td><td><code>application/json</code> (Strict schema enforcement)</td></tr>
-              <tr><td style="font-weight: 600;">Document Modality</td><td><code>Multimodal Inline PDF</code></td></tr>
+              <tr><td style="font-weight: 600;">Document Modality</td><td><code>{modality_display}</code></td></tr>
               <tr><td style="font-weight: 600;">Total Extracted Attributes</td><td><code>{total_fields} fields</code></td></tr>
             </tbody>
           </table>
           <div style="margin-top: 1rem; padding: 0.875rem; background-color: var(--bg-surface-subtle); border-radius: 0.375rem; border: 1px solid var(--border-color); font-size: 0.8125rem;">
-            <strong>Stage 1 Role:</strong> High-throughput initial extraction producing the candidate object. In Stage 2, five independent LLM judges with active reasoning tokens cross-examine this candidate payload against the original visual PDF pages and verification rubric.
+            <strong>Stage 1 Role:</strong> High-throughput initial extraction producing the candidate object. In Stage 2, five independent LLM judges with active reasoning tokens cross-examine this candidate payload against the original visual document and verification rubric.
           </div>
         </div>
       </div>
@@ -1086,7 +1120,9 @@ def _build_html_template(
   <script>
     const RUN_REPORT = {report_json_escaped};
     const RUN_RUBRIC = {rubric_json_escaped};
-    const RUN_PDF_B64 = {pdf_b64_escaped};
+    const RUN_DOC_B64 = {doc_b64_escaped};
+    const RUN_MIME_TYPE = {mime_type_escaped};
+    const IS_IMAGE = {str(is_image).lower()};
 
     const themeToggleBtn = document.getElementById("theme-toggle");
     const sunIcon = document.getElementById("theme-icon-sun");
@@ -1195,95 +1231,124 @@ def _build_html_template(
       exportBtn.addEventListener("click", exportReportJson);
     }}
 
-    let pdfDoc = null;
-    let pageNum = 1;
-    let pdfScale = 1.2;
-    const canvas = document.getElementById("pdf-canvas");
-    const canvasWrapper = document.getElementById("pdf-canvas-wrapper");
-    const embedFrame = document.getElementById("pdf-embed-frame");
+    // Image Zooming Logic
+    if (IS_IMAGE) {{
+      let imgScale = 1.0;
+      const imgElem = document.getElementById("source-doc-image");
+      const zoomInBtn = document.getElementById("zoom-in");
+      const zoomOutBtn = document.getElementById("zoom-out");
+      const zoomResetBtn = document.getElementById("zoom-reset");
 
-    function renderPdfPage(num) {{
-      if (!pdfDoc || !canvas) return;
-      pdfDoc.getPage(num).then(page => {{
-        const ctx = canvas.getContext("2d");
-        const viewport = page.getViewport({{ scale: pdfScale }});
-        canvas.height = viewport.height;
-        canvas.width = viewport.width;
+      if (zoomInBtn && imgElem) {{
+        zoomInBtn.addEventListener("click", () => {{
+          imgScale = Math.min(3.0, imgScale + 0.2);
+          imgElem.style.transform = `scale(${{imgScale}})`;
+        }});
+      }}
+      if (zoomOutBtn && imgElem) {{
+        zoomOutBtn.addEventListener("click", () => {{
+          imgScale = Math.max(0.4, imgScale - 0.2);
+          imgElem.style.transform = `scale(${{imgScale}})`;
+        }});
+      }}
+      if (zoomResetBtn && imgElem) {{
+        zoomResetBtn.addEventListener("click", () => {{
+          imgScale = 1.0;
+          imgElem.style.transform = "scale(1.0)";
+        }});
+      }}
+    }} else {{
+      // PDF.js Rendering Logic
+      let pdfDoc = null;
+      let pageNum = 1;
+      let pdfScale = 1.2;
+      const canvas = document.getElementById("pdf-canvas");
+      const canvasWrapper = document.getElementById("pdf-canvas-wrapper");
+      const embedFrame = document.getElementById("pdf-embed-frame");
 
-        const renderContext = {{
-          canvasContext: ctx,
-          viewport: viewport
-        }};
-        page.render(renderContext);
-        const pageDisplay = document.getElementById("page-num-display");
-        if (pageDisplay) pageDisplay.textContent = `Page ${{num}} of ${{pdfDoc.numPages}}`;
-      }}).catch(err => {{
-        console.warn("PDF page render error:", err);
-        showEmbedFallback();
-      }});
-    }}
+      function renderPdfPage(num) {{
+        if (!pdfDoc || !canvas) return;
+        pdfDoc.getPage(num).then(page => {{
+          const ctx = canvas.getContext("2d");
+          const viewport = page.getViewport({{ scale: pdfScale }});
+          canvas.height = viewport.height;
+          canvas.width = viewport.width;
 
-    function showEmbedFallback() {{
-      if (canvasWrapper) canvasWrapper.style.display = "none";
-      if (embedFrame) embedFrame.style.display = "block";
-    }}
+          const renderContext = {{
+            canvasContext: ctx,
+            viewport: viewport
+          }};
+          page.render(renderContext);
+          const pageDisplay = document.getElementById("page-num-display");
+          if (pageDisplay) pageDisplay.textContent = `Page ${{num}} of ${{pdfDoc.numPages}}`;
+        }}).catch(err => {{
+          console.warn("PDF page render error:", err);
+          showEmbedFallback();
+        }});
+      }}
 
-    const prevBtn = document.getElementById("prev-page");
-    if (prevBtn) {{
-      prevBtn.addEventListener("click", () => {{
-        if (pageNum <= 1) return;
-        pageNum--;
-        renderPdfPage(pageNum);
-      }});
-    }}
+      function showEmbedFallback() {{
+        if (canvasWrapper) canvasWrapper.style.display = "none";
+        if (embedFrame) embedFrame.style.display = "block";
+      }}
 
-    const nextBtn = document.getElementById("next-page");
-    if (nextBtn) {{
-      nextBtn.addEventListener("click", () => {{
-        if (!pdfDoc || pageNum >= pdfDoc.numPages) return;
-        pageNum++;
-        renderPdfPage(pageNum);
-      }});
-    }}
+      const prevBtn = document.getElementById("prev-page");
+      if (prevBtn) {{
+        prevBtn.addEventListener("click", () => {{
+          if (pageNum <= 1) return;
+          pageNum--;
+          renderPdfPage(pageNum);
+        }});
+      }}
 
-    const zoomInBtn = document.getElementById("zoom-in");
-    if (zoomInBtn) {{
-      zoomInBtn.addEventListener("click", () => {{
-        pdfScale = Math.min(2.5, pdfScale + 0.2);
-        renderPdfPage(pageNum);
-      }});
-    }}
+      const nextBtn = document.getElementById("next-page");
+      if (nextBtn) {{
+        nextBtn.addEventListener("click", () => {{
+          if (!pdfDoc || pageNum >= pdfDoc.numPages) return;
+          pageNum++;
+          renderPdfPage(pageNum);
+        }});
+      }}
 
-    const zoomOutBtn = document.getElementById("zoom-out");
-    if (zoomOutBtn) {{
-      zoomOutBtn.addEventListener("click", () => {{
-        pdfScale = Math.max(0.6, pdfScale - 0.2);
-        renderPdfPage(pageNum);
-      }});
-    }}
+      const zoomInBtn = document.getElementById("zoom-in");
+      if (zoomInBtn) {{
+        zoomInBtn.addEventListener("click", () => {{
+          pdfScale = Math.min(2.5, pdfScale + 0.2);
+          renderPdfPage(pageNum);
+        }});
+      }}
 
-    if (RUN_PDF_B64) {{
-      try {{
-        if (typeof pdfjsLib !== "undefined") {{
-          const binaryStr = atob(RUN_PDF_B64);
-          const len = binaryStr.length;
-          const bytes = new Uint8Array(len);
-          for (let i = 0; i < len; i++) {{
-            bytes[i] = binaryStr.charCodeAt(i);
-          }}
-          pdfjsLib.getDocument({{ data: bytes }}).promise.then(pdf => {{
-            pdfDoc = pdf;
-            renderPdfPage(1);
-          }}).catch(err => {{
-            console.warn("PDF.js init failed, falling back to embed:", err);
+      const zoomOutBtn = document.getElementById("zoom-out");
+      if (zoomOutBtn) {{
+        zoomOutBtn.addEventListener("click", () => {{
+          pdfScale = Math.max(0.6, pdfScale - 0.2);
+          renderPdfPage(pageNum);
+        }});
+      }}
+
+      if (RUN_DOC_B64) {{
+        try {{
+          if (typeof pdfjsLib !== "undefined") {{
+            const binaryStr = atob(RUN_DOC_B64);
+            const len = binaryStr.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {{
+              bytes[i] = binaryStr.charCodeAt(i);
+            }}
+            pdfjsLib.getDocument({{ data: bytes }}).promise.then(pdf => {{
+              pdfDoc = pdf;
+              renderPdfPage(1);
+            }}).catch(err => {{
+              console.warn("PDF.js init failed, falling back to embed:", err);
+              showEmbedFallback();
+            }});
+          }} else {{
             showEmbedFallback();
-          }});
-        }} else {{
+          }}
+        }} catch(err) {{
+          console.warn("Base64 decode or PDF load failed:", err);
           showEmbedFallback();
         }}
-      }} catch(err) {{
-        console.warn("Base64 decode or PDF load failed:", err);
-        showEmbedFallback();
       }}
     }}
   </script>

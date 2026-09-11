@@ -18,9 +18,17 @@ from pdf_consensus_evaluator.pipeline import ExtractionConsensusPipeline
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Evaluate Candidate Extraction against Source PDF and Rubric using 5x Judge Panel"
+        description="Evaluate Candidate Extraction against Source Document/PDF and Rubric using 5x Judge Panel"
     )
-    parser.add_argument("--pdf", type=str, required=True, help="Path to source PDF")
+    parser.add_argument(
+        "--document",
+        "--pdf",
+        "--image",
+        dest="document",
+        type=str,
+        required=True,
+        help="Path to source document (PDF, JPEG, PNG, WebP, etc.)",
+    )
     parser.add_argument("--rubric", type=str, required=True, help="Path to rubric JSON")
     parser.add_argument(
         "--candidate-json",
@@ -71,8 +79,8 @@ def main():
     )
     logger = logging.getLogger("evaluate_candidate")
 
-    if not os.path.exists(args.pdf):
-        logger.error("PDF file not found: %s", args.pdf)
+    if not os.path.exists(args.document):
+        logger.error("Document file not found: %s", args.document)
         return 1
     if not os.path.exists(args.rubric):
         logger.error("Rubric file not found: %s", args.rubric)
@@ -93,7 +101,7 @@ def main():
     )
 
     report = pipeline.run(
-        pdf_path=args.pdf,
+        document_path=args.document,
         rubric=rubric,
         candidate_extraction=candidate_data,
     )
@@ -123,7 +131,7 @@ def main():
         from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html
         generate_dashboard_html(
             report=report,
-            pdf_path=args.pdf,
+            document_path=args.document,
             rubric=rubric,
             output_html_path=dashboard_path,
         )

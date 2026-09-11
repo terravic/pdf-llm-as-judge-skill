@@ -24,13 +24,16 @@ def setup_logging(verbose: bool = False) -> None:
 
 def parse_args(args: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Multi-Agent PDF Extraction & Consensus Evaluator with LLM Judges"
+        description="Multi-Agent Document/PDF Extraction & Consensus Evaluator with LLM Judges"
     )
     parser.add_argument(
+        "--document",
         "--pdf",
+        "--image",
+        dest="document",
         type=str,
         required=True,
-        help="Path to the input PDF document",
+        help="Path to the input document (PDF, JPEG, PNG, WebP, etc.)",
     )
     parser.add_argument(
         "--rubric",
@@ -111,8 +114,8 @@ def main() -> int:
     setup_logging(args.verbose)
     logger = logging.getLogger("pdf_consensus_evaluator.cli")
 
-    if not os.path.exists(args.pdf):
-        logger.error("PDF file not found: %s", args.pdf)
+    if not os.path.exists(args.document):
+        logger.error("Document file not found: %s", args.document)
         return 1
 
     if not os.path.exists(args.rubric):
@@ -144,7 +147,7 @@ def main() -> int:
 
     try:
         report = pipeline.run(
-            pdf_path=args.pdf,
+            document_path=args.document,
             rubric=rubric,
             candidate_extraction=candidate_data,
         )
@@ -179,7 +182,7 @@ def main() -> int:
         from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html
         generate_dashboard_html(
             report=report,
-            pdf_path=args.pdf,
+            document_path=args.document,
             rubric=rubric,
             output_html_path=dashboard_path,
         )

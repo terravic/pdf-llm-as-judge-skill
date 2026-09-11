@@ -51,20 +51,20 @@ class Stage2JudgePanel:
     ) -> Tuple[str, str]:
         """Constructs the system instruction and prompt for an independent LLM judge."""
         system_instruction = (
-            f"You are an expert, meticulous LLM Judge evaluating an extracted JSON payload against a source PDF document.\n"
+            f"You are an expert, meticulous LLM Judge evaluating an extracted JSON payload against a source document (PDF or image).\n"
             f"Document Type: {rubric.document_type}\n"
             f"Rubric Version: {rubric.rubric_version}\n\n"
             f"Your Core Duties:\n"
             f"1. Syntactic Verification: Check if candidate values satisfy type, regex patterns, token count, and required constraints.\n"
-            f"2. Semantic Grounding: Deeply inspect the source PDF visual pages to confirm that the extracted value factually and verbatim matches the document text without hallucination, transposition, field mix-up, or misattribution.\n\n"
+            f"2. Semantic Grounding: Deeply inspect the source visual document/image (including form structures, table grids, checkboxes, handwritten notes/cursive, and strike-through corrections) to confirm that the extracted value factually matches the document without hallucination, transposition, field mix-up, or misattribution.\n\n"
             f"For every evaluated field, produce:\n"
             f"- field_name: Target attribute name.\n"
             f"- syntactic_check: 'PASS' or 'FAIL'.\n"
             f"- grounding_check: 'PASS' or 'FAIL'.\n"
             f"- verdict: 'PASS' if and only if both syntactic and grounding checks pass; otherwise 'FAIL'.\n"
-            f"- failure_mode: 'NONE' if PASS, or one of the rubric failure modes / ['FORMAT_MISMATCH', 'MISSING_VALUE', 'HALLUCINATION', 'WRONG_ENTITY', 'UNREADABLE_SOURCE'].\n"
-            f"- justification: Concise reasoning citing exact page number, section, or line from the PDF.\n"
-            f"- proposed_correction: The actual correct value from the PDF if candidate was marked FAIL, or null if PASS.\n\n"
+            f"- failure_mode: 'NONE' if PASS, or one of the rubric failure modes / ['FORMAT_MISMATCH', 'MISSING_VALUE', 'HALLUCINATION', 'WRONG_ENTITY', 'UNREADABLE_SOURCE', 'ILLEGIBLE_HANDWRITING', 'CHECKBOX_MISINTERPRETED', 'HANDWRITTEN_CORRECTION_IGNORED'].\n"
+            f"- justification: Concise reasoning citing exact page number, section, checkbox state, or handwritten line from the document.\n"
+            f"- proposed_correction: The actual correct value from the document if candidate was marked FAIL, or null if PASS.\n\n"
             f"Output must be a valid JSON object containing an 'evaluations' list of objects conforming to the schema."
         )
 
@@ -94,7 +94,7 @@ class Stage2JudgePanel:
             f"{json.dumps(criteria_dump, indent=2)}\n\n"
             f"--- CANDIDATE EXTRACTION TO EVALUATE ---\n"
             f"{json.dumps(candidate_extraction, indent=2)}\n\n"
-            f"Evaluate every field in the candidate extraction against the attached PDF and rubric rules.\n"
+            f"Evaluate every field in the candidate extraction against the attached document and rubric rules.\n"
             f"Return JSON format: {{\"evaluations\": [...]}}"
         )
 
@@ -103,11 +103,18 @@ class Stage2JudgePanel:
     async def evaluate_single_judge(
         self,
         judge_idx: int,
-        pdf_path: str,
-        rubric: RubricSpec,
-        candidate_extraction: Dict[str, Any],
+        document_path: Optional[str] = None,
+        rubric: Optional[RubricSpec] = None,
+        candidate_extraction: Optional[Dict[str, Any]] = None,
+        pdf_path: Optional[str] = None,
     ) -> JudgeReport:
         """Executes a single judge evaluation with thinking tokens and timeouts."""
+        target_path = document_path or pdf_path
+        if not target_path:
+            raise ValueError("document_path or pdf_path must be provided")
+        if rubric is None or candidate_extraction is None:
+            raise ValueError("rubric and candidate_extraction must be provided")
+
         judge_id = f"judge_{judge_idx + 1}"
         start_time = time.time()
 
@@ -126,7 +133,7 @@ class Stage2JudgePanel:
                     model=self.model,
                     system_instruction=system_instruction,
                     prompt=prompt,
-                    pdf_path=pdf_path,
+                    document_path=target_path,
                     thinking_budget=self.thinking_budget,
                     temperature=temperature,
                     response_json=True,
@@ -186,11 +193,18 @@ class Stage2JudgePanel:
 
     async def evaluate_panel_async(
         self,
-        pdf_path: str,
-        rubric: RubricSpec,
-        candidate_extraction: Dict[str, Any],
+        document_path: Optional[str] = None,
+        rubric: Optional[RubricSpec] = None,
+        candidate_extraction: Optional[Dict[str, Any]] = None,
+        pdf_path: Optional[str] = None,
     ) -> List[JudgeReport]:
         """Runs all 5 judge instances concurrently using asyncio.gather."""
+        target_path = document_path or pdf_path
+        if not target_path:
+            raise ValueError("document_path or pdf_path must be provided")
+        if rubric is None or candidate_extraction is None:
+            raise ValueError("rubric and candidate_extraction must be provided")
+
         logger.info(
             "Judge Panel: Launching %d parallel judges (model=%s, thinking_budget=%d)...",
             self.num_judges,
@@ -201,7 +215,7 @@ class Stage2JudgePanel:
         tasks = [
             self.evaluate_single_judge(
                 judge_idx=i,
-                pdf_path=pdf_path,
+                document_path=target_path,
                 rubric=rubric,
                 candidate_extraction=candidate_extraction,
             )
@@ -213,14 +227,15 @@ class Stage2JudgePanel:
 
     def evaluate_panel(
         self,
-        pdf_path: str,
-        rubric: RubricSpec,
-        candidate_extraction: Dict[str, Any],
+        document_path: Optional[str] = None,
+        rubric: Optional[RubricSpec] = None,
+        candidate_extraction: Optional[Dict[str, Any]] = None,
+        pdf_path: Optional[str] = None,
     ) -> List[JudgeReport]:
         """Synchronous entry point for Stage 2 panel evaluation."""
         return asyncio.run(
             self.evaluate_panel_async(
-                pdf_path=pdf_path,
+                document_path=document_path or pdf_path,
                 rubric=rubric,
                 candidate_extraction=candidate_extraction,
             )

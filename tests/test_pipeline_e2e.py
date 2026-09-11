@@ -286,3 +286,96 @@ def test_cli_no_dashboard(mock_gen, tmp_path, monkeypatch):
     assert not expected_dash.exists()
 
 
+def test_mime_type_detection(tmp_path):
+    """Tests dynamic MIME type detection for PDFs and images."""
+    from pdf_consensus_evaluator.gemini_client import GeminiClient
+
+    client = GeminiClient(api_key="mock-key")
+
+    png_file = tmp_path / "sample.png"
+    png_file.write_bytes(b"\x89PNG\r\n\x1a\nfake-png-data")
+    b64, mime = client.encode_document(str(png_file))
+    assert mime == "image/png"
+    assert len(b64) > 0
+
+    jpg_file = tmp_path / "sample.jpg"
+    jpg_file.write_bytes(b"\xff\xd8\xfffake-jpg-data")
+    b64, mime = client.encode_document(str(jpg_file))
+    assert mime == "image/jpeg"
+
+    jpeg_file = tmp_path / "sample.jpeg"
+    jpeg_file.write_bytes(b"\xff\xd8\xfffake-jpeg-data")
+    _, mime = client.encode_document(str(jpeg_file))
+    assert mime == "image/jpeg"
+
+    webp_file = tmp_path / "sample.webp"
+    webp_file.write_bytes(b"RIFFfakeWEBP")
+    _, mime = client.encode_document(str(webp_file))
+    assert mime == "image/webp"
+
+
+@patch("pdf_consensus_evaluator.gemini_client.GeminiClient.generate_content", side_effect=mock_generate_content_dispatcher)
+def test_pipeline_with_image_input(mock_gen, tmp_path):
+    """Tests running the pipeline with an image input file (.png)."""
+    from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html
+
+    sample_img = tmp_path / "intake_form.png"
+    sample_img.write_bytes(b"\x89PNG\r\n\x1a\nsample-image-bytes")
+
+    rubric = RubricSpec.from_json_file(SAMPLE_RUBRIC_PATH)
+    pipeline = ExtractionConsensusPipeline(api_key="test-key", num_judges=5)
+
+    report = pipeline.run(
+        document_path=str(sample_img),
+        rubric=rubric,
+    )
+
+    assert report.total_fields == 6
+    assert report.accepted_field_count == 6
+
+    # Test dashboard generation for image
+    out_html = tmp_path / "image_dashboard.html"
+    html_content = generate_dashboard_html(
+        report=report,
+        document_path=str(sample_img),
+        rubric=rubric,
+        output_html_path=str(out_html),
+    )
+
+    assert out_html.exists()
+    assert "source-doc-image" in html_content
+    assert "image/png" in html_content
+    assert "Image &amp; Rubric Inspector" in html_content
+    assert "Multimodal Source Image Viewer" in html_content
+
+
+@patch("pdf_consensus_evaluator.gemini_client.GeminiClient.generate_content", side_effect=mock_generate_content_dispatcher)
+def test_cli_with_image_flag(mock_gen, tmp_path, monkeypatch):
+    """Tests CLI execution using --image / --document flag with an image file."""
+    from pdf_consensus_evaluator.cli import main
+
+    sample_img = tmp_path / "document.jpeg"
+    sample_img.write_bytes(b"\xff\xd8\xfffake-jpeg-bytes")
+
+    out_json = tmp_path / "image_report.json"
+    expected_dash = tmp_path / "image_report_dashboard.html"
+
+    test_args = [
+        "cli.py",
+        "--image", str(sample_img),
+        "--rubric", SAMPLE_RUBRIC_PATH,
+        "--output", str(out_json),
+        "--api-key", "mock-key",
+    ]
+    monkeypatch.setattr("sys.argv", test_args)
+
+    ret = main()
+    assert ret == 0
+    assert out_json.exists()
+    assert expected_dash.exists()
+
+    dash_content = expected_dash.read_text(encoding="utf-8")
+    assert "image/jpeg" in dash_content
+    assert "source-doc-image" in dash_content
+
+

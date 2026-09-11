@@ -38,16 +38,16 @@ class GeminiClient:
         self.oauth_token = (
             os.environ.get("GOOGLE_OAUTH_ACCESS_TOKEN")
             or os.environ.get("ACCESS_TOKEN")
-            or self._resolve_gcp_access_token()
+            or self._resolve_access_token()
         )
-        self.project_id = self._resolve_gcp_project_id()
+        self.project_id = self._resolve_project_id()
         self.location = os.environ.get("GOOGLE_CLOUD_LOCATION") or os.environ.get("VERTEX_LOCATION", "us-central1")
         self.base_url = base_url or os.environ.get("GEMINI_API_BASE_URL") or self.DEFAULT_BASE_URL
         self.timeout = timeout
         self.max_retries = max_retries
         self.backoff_factor = backoff_factor
 
-    def _resolve_gcp_access_token(self) -> Optional[str]:
+    def _resolve_access_token(self) -> Optional[str]:
         """Attempts to dynamically obtain an OAuth access token from the environment."""
         try:
             import google.auth
@@ -61,7 +61,7 @@ class GeminiClient:
         except Exception:
             pass
 
-        # Fallback to gcloud if available in GCP environment
+        # Fallback to credentials helper if available in environment
         try:
             import subprocess
             result = subprocess.run(
@@ -77,8 +77,8 @@ class GeminiClient:
 
         return None
 
-    def _resolve_gcp_project_id(self) -> Optional[str]:
-        """Attempts to dynamically obtain the Google Cloud Project ID."""
+    def _resolve_project_id(self) -> Optional[str]:
+        """Attempts to dynamically obtain the Cloud Project ID."""
         project = os.environ.get("GOOGLE_CLOUD_PROJECT") or os.environ.get("VERTEX_PROJECT")
         if project:
             return project
@@ -108,14 +108,43 @@ class GeminiClient:
 
         return None
 
-    def encode_pdf(self, pdf_path: str) -> Tuple[str, str]:
-        """Encodes PDF file to base64 string and returns (base64_data, mime_type)."""
-        if not os.path.exists(pdf_path):
-            raise FileNotFoundError(f"PDF file not found at path: {pdf_path}")
-        with open(pdf_path, "rb") as f:
+    SUPPORTED_MIME_TYPES = {
+        ".pdf": "application/pdf",
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".webp": "image/webp",
+        ".heic": "image/heic",
+        ".heif": "image/heif",
+        ".gif": "image/gif",
+    }
+
+    @classmethod
+    def detect_mime_type(cls, file_path: str) -> str:
+        """Determines the MIME type based on file extension or content type detection."""
+        _, ext = os.path.splitext(file_path.lower())
+        if ext in cls.SUPPORTED_MIME_TYPES:
+            return cls.SUPPORTED_MIME_TYPES[ext]
+        import mimetypes
+        guessed, _ = mimetypes.guess_type(file_path)
+        if guessed:
+            return guessed
+        return "application/octet-stream"
+
+    def encode_document(self, document_path: str, mime_type: Optional[str] = None) -> Tuple[str, str]:
+        """Encodes document (PDF or image) file to base64 string and returns (base64_data, mime_type)."""
+        if not os.path.exists(document_path):
+            raise FileNotFoundError(f"Document file not found at path: {document_path}")
+        if not mime_type:
+            mime_type = self.detect_mime_type(document_path)
+        with open(document_path, "rb") as f:
             data = f.read()
         b64_str = base64.b64encode(data).decode("utf-8")
-        return b64_str, "application/pdf"
+        return b64_str, mime_type
+
+    def encode_pdf(self, pdf_path: str) -> Tuple[str, str]:
+        """Encodes PDF file to base64 string and returns (base64_data, mime_type). Backward-compatible alias."""
+        return self.encode_document(pdf_path, mime_type="application/pdf" if pdf_path.lower().endswith(".pdf") else None)
 
     def _build_endpoint_and_headers(self, model: str) -> Tuple[str, Dict[str, str]]:
         """Constructs the appropriate API endpoint URL and authentication headers."""
@@ -146,7 +175,7 @@ class GeminiClient:
 
         raise ValueError(
             "Authentication required: Please set the GEMINI_API_KEY environment variable, "
-            "provide an OAuth access token, or log in via Google Cloud Application Default Credentials."
+            "provide an OAuth access token, or log in via Application Default Credentials."
         )
 
     def generate_content(
@@ -156,6 +185,9 @@ class GeminiClient:
         prompt: str,
         pdf_path: Optional[str] = None,
         pdf_b64: Optional[str] = None,
+        document_path: Optional[str] = None,
+        document_b64: Optional[str] = None,
+        mime_type: Optional[str] = None,
         thinking_budget: int = 0,
         temperature: float = 0.1,
         response_json: bool = True,
@@ -165,19 +197,22 @@ class GeminiClient:
 
         parts: List[Dict[str, Any]] = []
 
-        if pdf_path:
-            b64_data, mime_type = self.encode_pdf(pdf_path)
+        target_path = document_path or pdf_path
+        target_b64 = document_b64 or pdf_b64
+
+        if target_path:
+            b64_data, detected_mime = self.encode_document(target_path, mime_type=mime_type)
             parts.append({
                 "inlineData": {
-                    "mimeType": mime_type,
+                    "mimeType": detected_mime,
                     "data": b64_data,
                 }
             })
-        elif pdf_b64:
+        elif target_b64:
             parts.append({
                 "inlineData": {
-                    "mimeType": "application/pdf",
-                    "data": pdf_b64,
+                    "mimeType": mime_type or "application/pdf",
+                    "data": target_b64,
                 }
             })
 
@@ -264,6 +299,9 @@ class GeminiClient:
         prompt: str,
         pdf_path: Optional[str] = None,
         pdf_b64: Optional[str] = None,
+        document_path: Optional[str] = None,
+        document_b64: Optional[str] = None,
+        mime_type: Optional[str] = None,
         thinking_budget: int = 0,
         temperature: float = 0.1,
         response_json: bool = True,
@@ -276,6 +314,9 @@ class GeminiClient:
             prompt=prompt,
             pdf_path=pdf_path,
             pdf_b64=pdf_b64,
+            document_path=document_path,
+            document_b64=document_b64,
+            mime_type=mime_type,
             thinking_budget=thinking_budget,
             temperature=temperature,
             response_json=response_json,

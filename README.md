@@ -1,10 +1,10 @@
-# Multi-Agent PDF Extraction and Consensus Evaluator
+# Multi-Agent Document Extraction and Consensus Evaluator
 
-A production-grade, agentic document intelligence system that extracts structured data from raw PDF files, evaluates candidate extractions using an ensemble panel of five parallel thinking-enabled LLM judges, and deterministically computes field-level consensus scores and routing decisions.
+A production-grade, agentic document intelligence system that extracts structured data from PDF files and high-resolution images (including form structures with handwritten text, checkboxes, and fill-in-the-blank entries), evaluates candidate extractions using an ensemble panel of five parallel thinking-enabled LLM judges, and deterministically computes field-level consensus scores and routing decisions.
 
 Compatible with any modern AI agent harness supporting standard agent skills, plugins, and interactive UI dashboard rendering.
 
-![Multi-Agent PDF Extraction and Consensus Evaluator Architecture and UI Dashboard](assets/pipeline_workflow_dashboard.png)
+![Multi-Agent Document Extraction and Consensus Evaluator Architecture and UI Dashboard](assets/pipeline_workflow_dashboard.png)
 
 ---
 
@@ -13,13 +13,14 @@ Compatible with any modern AI agent harness supporting standard agent skills, pl
 High-stakes document extraction requires both high throughput and rigorous validation to eliminate hallucinations, field transpositions, and formatting errors. This project implements a three-stage pipeline:
 
 ```
-[Input PDF Document + Target Extraction Rubric]
+[Input Document (PDF/Image) + Target Extraction Rubric]
                        |
                        v
 +---------------------------------------------------------+
 | Stage 1: Primary Multimodal Extraction                  |
 | - Engine: Gemini 3.8 Flash (Thinking Budget: 0)         |
 | - Low temperature (0.1) for high precision parsing      |
+| - Handles typed text, form layouts & handwriting        |
 | - Output: candidate_extraction.json                     |
 +--------------------------+------------------------------+
                            |
@@ -27,8 +28,9 @@ High-stakes document extraction requires both high throughput and rigorous valid
 +---------------------------------------------------------+
 | Stage 2: Parallel 5x LLM-as-a-Judge Panel               |
 | - Engine: 5x Gemini 3.6 Flash (Thinking Budget: 2048+)  |
-| - Inputs: Source PDF + Candidate JSON + Rubric Rules    |
+| - Inputs: Source Document + Candidate JSON + Rubric     |
 | - Non-blocking concurrent execution (asyncio)           |
+| - Evaluates visual grounding & handwriting fidelity     |
 | - Output: 5 distinct structured evaluation payloads     |
 +--------------------------+------------------------------+
                            |
@@ -46,13 +48,15 @@ High-stakes document extraction requires both high throughput and rigorous valid
 
 1. **Stage 1: Primary Multimodal Extraction**
    - High-throughput multimodal parsing using `gemini-3.8-flash` with thinking budget set to 0.
+   - Natively processes form structures, tabular grids, fill-in-the-blank fields, checkboxes, and handwritten entries (print or cursive) alongside digital text.
    - Converts the verification rubric criteria into structural schema instructions.
    - Emits a raw candidate JSON payload.
 
 2. **Stage 2: Parallel LLM-as-a-Judge Panel**
    - Spawns five parallel, isolated judge calls using `gemini-3.6-flash` with active reasoning (`thinking_budget: 2048` tokens) and sample diversity.
-   - Evaluates syntactic rules (data types, regex patterns, token lengths) and visual semantic grounding against the original PDF pages.
-   - Detects specific failure modes (e.g., `HALLUCINATION`, `FORMAT_MISMATCH`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`, `DIGIT_TRANSPOSITION`, `SECONDARY_CODE_EXTRACTED_AS_PRIMARY`).
+   - Evaluates syntactic rules (data types, regex patterns, token lengths) and visual semantic grounding against the original document pages.
+   - Inspects visual nuances such as handwriting legibility, checkbox markings, and handwritten strikethrough corrections.
+   - Detects specific failure modes (e.g., `HALLUCINATION`, `FORMAT_MISMATCH`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`, `DIGIT_TRANSPOSITION`, `SECONDARY_CODE_EXTRACTED_AS_PRIMARY`, `ILLEGIBLE_HANDWRITING`, `CHECKBOX_MISINTERPRETED`).
 
 3. **Stage 3: Deterministic Consensus and Routing**
    - Post-processes judge verdicts into consensus metrics without extra model calls.
@@ -115,6 +119,7 @@ pdf-llm-as-judge-skill/
 │   ├── rubric_spec_healthcare_patient_intake_form.json # Intake form rubric specification
 │   ├── expected_candidate_healthcare_patient_intake_form.json # Intake form reference extraction
 │   ├── cancer_screening_lab_report.pdf             # Cancer screening molecular diagnostics PDF (vector text)
+│   ├── cancer_screening_lab_report.jpg             # Cancer screening report sample image (JPEG)
 │   ├── cancer_screening_lab_report_scanned.pdf     # Cancer screening report (100% image-only, flatbed scanner artifacts)
 │   ├── cancer_screening_lab_report_degraded.pdf    # Cancer screening report (100% image-only, heavy noise & smudge)
 │   ├── rubric_spec_cancer_screening_lab_report.json # Cancer screening rubric specification
@@ -149,24 +154,24 @@ All sample files provided in the `samples/` directory are completely synthetic a
    cd pdf-llm-as-judge-skill
    ```
 
-2. Choose your authentication method (Google Cloud Vertex AI or Google AI Studio):
+2. Choose your authentication method (Cloud Vertex AI or AI Studio):
 
-   #### Option A: Google Cloud Vertex AI (Default / Enterprise - No API Key Required)
-   If you have a Google Cloud project with Vertex AI enabled, you do not need an API key. Authenticate using Application Default Credentials (ADC):
+   #### Option A: Cloud Vertex AI (Default / Enterprise - No API Key Required)
+   If you have a cloud project with Vertex AI enabled, you do not need an API key. Authenticate using Application Default Credentials (ADC):
    ```bash
-   # Log in to Google Cloud ADC
+   # Log in to Cloud ADC
    gcloud auth application-default login
    ```
-   - **Project Auto-Detection**: The client automatically detects your active GCP project from `gcloud config get-value project`, your ADC metadata, or `GOOGLE_CLOUD_PROJECT`.
+   - **Project Auto-Detection**: The client automatically detects your active project from `gcloud config get-value project`, your ADC metadata, or `GOOGLE_CLOUD_PROJECT`.
    - **Optional Environment Variables**:
      ```bash
-     export GOOGLE_CLOUD_PROJECT="your-gcp-project-id"   # Explicit project override
+     export GOOGLE_CLOUD_PROJECT="your-project-id"   # Explicit project override
      export GOOGLE_CLOUD_LOCATION="us-central1"          # Default region (us-central1)
      ```
    - **Standalone Desktop Apps & Agent Environments**: Since ADC credentials are stored globally at `~/.config/gcloud/application_default_credentials.json`, standalone agent harnesses and background scripts automatically detect your credentials.
 
-   #### Option B: Google AI Studio (API Key)
-   If you prefer using Google AI Studio developer keys:
+   #### Option B: AI Studio (API Key)
+   If you prefer using AI Studio developer keys:
    ```bash
    export GEMINI_API_KEY="AIzaSy..."
    ```
@@ -178,15 +183,17 @@ All sample files provided in the `samples/` directory are completely synthetic a
 
 ### 1. Running the Full Pipeline via CLI (with UI Dashboard)
 
-Run the full extraction and consensus pipeline on a PDF and rubric, exporting both JSON and the HTML UI dashboard:
+Run the full extraction and consensus pipeline on a PDF or image file (JPEG, PNG, WebP) and rubric, exporting both JSON and the HTML UI dashboard:
 
 ```bash
 python3 scripts/run_pipeline.py \
-  --pdf samples/healthcare_patient_intake_form.pdf \
+  --document samples/healthcare_patient_intake_form.pdf \
   --rubric samples/rubric_spec_healthcare_patient_intake_form.json \
   --output output/extraction_report.json \
   --dashboard ui/index.html
 ```
+
+You can also pass `--image path/to/image.png` or `--pdf path/to/document.pdf`.
 
 ### 2. Evaluating an Existing Candidate Extraction
 
@@ -194,7 +201,7 @@ If you already have candidate extraction JSON and want to run the 5x Judge Panel
 
 ```bash
 python3 scripts/evaluate_candidate.py \
-  --pdf samples/healthcare_patient_intake_form.pdf \
+  --document samples/healthcare_patient_intake_form.pdf \
   --rubric samples/rubric_spec_healthcare_patient_intake_form.json \
   --candidate-json samples/expected_candidate_healthcare_patient_intake_form.json \
   --output output/evaluation_report.json \
@@ -205,7 +212,7 @@ python3 scripts/evaluate_candidate.py \
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--pdf` | String | (Required) | Path to input PDF file |
+| `--document`, `--image`, `--pdf` | String | (Required) | Path to input document or image file (`.pdf`, `.jpeg`, `.jpg`, `.png`, `.webp`, `.heic`) |
 | `--rubric` | String | (Required) | Path to JSON rubric specification file |
 | `--candidate-json` | String | `None` | Pre-extracted candidate JSON (evaluates candidate directly) |
 | `--output` | String | `None` | File path to write full JSON report |
@@ -238,34 +245,70 @@ pytest -v tests/
 
 ## Non-Technical User Guide: How to Use This Skill
 
-This skill allows anyone to extract and automatically verify data from complex PDF documents (such as medical reports, insurance claims, or intake forms) without writing code.
+This skill enables users to extract and automatically verify structured information from complex documents (such as medical records, intake forms, lab reports, invoices, and IDs) in PDF or image format without needing to write code.
 
-### How It Works in Plain Language
+### Why Multi-Agent Consensus Matters
 
-1. **Extraction**: An AI model reads the PDF document and extracts the required fields based on rules defined in a rubric file.
-2. **5-Judge Verification**: A panel of five independent AI judges simultaneously verifies each extracted value against the original visual PDF pages and validation rules.
-3. **Consensus & Routing**: The system calculates how many judges agree on each field:
-   - **Unanimous / Majority (4/5 or 5/5 passes)**: The data is verified as accurate and accepted automatically.
-   - **Contested (3/5 passes)**: The judges had mixed opinions; the field is flagged for a human to review.
-   - **Rejected (2/5 or fewer passes)**: The extraction was inaccurate, unreadable, or violated rules; the field is flagged for resubmission.
-4. **Visual Dashboard**: An interactive HTML dashboard (`ui/index.html`) is generated, displaying the PDF pages, the extracted data, and the judge reasoning side-by-side.
+Traditional automated document processing systems rely on a single model or optical character recognition (OCR) engine. When an ambiguous field or low-contrast scan is encountered, single-engine systems frequently produce silent hallucinations or digit transpositions (such as swapping numbers in an ID or misreading clinic addresses as patient addresses).
+
+This skill eliminates single-point failures by pairing high-throughput extraction with an independent panel of five parallel AI judges. Each judge inspects the original document visual, verifies field syntax and rules, and casts a vote. Consensus math determines whether data is trusted automatically or routed for human review.
 
 ---
 
-### Step-by-Step Instructions
+### How It Works in 3 Simple Steps
 
-1. **Locate or Prepare Your Files**:
-   - Have your PDF document available (for example, `samples/healthcare_patient_intake_form.pdf` or `samples/cancer_screening_lab_report.pdf`).
-   - Have the matching rubric JSON file available (for example, `samples/rubric_spec_healthcare_patient_intake_form.json` or `samples/rubric_spec_cancer_screening_lab_report.json`).
+1. **Extraction (Primary Reader)**: An AI reader examines your PDF or image document and extracts all requested fields according to the verification rubric rules.
+2. **Independent Panel Review (5 Judges)**: Five independent AI judges review the extracted data in parallel against the original visual document pages. Each judge verifies:
+   - Does the extracted value exactly match what is shown in the document?
+   - Does the value follow expected formatting rules (such as date formats or ID patterns)?
+   - Is there any evidence of hallucination, missed fields, or data transposition?
+3. **Consensus & Routing**: The system counts the number of judges in agreement and makes a deterministic routing decision:
+   - **5 out of 5 Judges Agree (Unanimous Pass)**: Extreme confidence. The data is verified and automatically accepted.
+   - **4 out of 5 Judges Agree (Majority Pass)**: High confidence. The data is accepted with a note of the single dissenting reason.
+   - **3 out of 5 Judges Agree (Contested)**: Split opinion. The field is flagged for Human-in-the-Loop (HITL) review with the conflicting arguments.
+   - **2 or Fewer Judges Agree (Rejected)**: Low confidence or failed validation. The extraction is flagged for correction or re-scan.
 
-2. **Send a Request in the Chat**:
-   Type the slash command or a plain English request referencing the file paths:
+---
+
+### Step-by-Step Practical Examples
+
+#### Example A: Processing a Multi-Page PDF Document
+
+Suppose you have a clinical intake form (`samples/healthcare_patient_intake_form.pdf`) and the target rubric specification (`samples/rubric_spec_healthcare_patient_intake_form.json`).
+
+1. **Send the request in your AI agent chat**:
    ```text
    /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
    ```
+2. **Review the summary response**:
+   The agent displays the verified fields (patient name, date of birth, insurance member ID, etc.) along with their consensus scores (e.g. 5/5 Unanimous).
+3. **Open the visual dashboard**:
+   Open `ui/index.html` in your browser to view the original PDF on the left and the 5-judge evaluation breakdown on the right.
 
-3. **Review the Results in the UI Dashboard**:
-   Open `ui/index.html` in your web browser. You can navigate through five tabs to inspect the original PDF, review the candidate extraction, see each judge's reasoning and citations, and copy the clean validated data.
+#### Example B: Processing a Scanned Image File (JPEG, PNG, WebP)
+
+Suppose you have a photo or scan of a lab report (`samples/cancer_screening_lab_report.jpg`) and the corresponding rubric (`samples/rubric_spec_cancer_screening_lab_report.json`).
+
+1. **Send the request in your AI agent chat**:
+   ```text
+   /pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json
+   ```
+2. **Review the extracted molecular findings**:
+   The agent extracts the clinical biomarkers, tumor fraction, and gene mutations, verifying that all five judges agree with the values in the report image.
+3. **Inspect the interactive image viewer**:
+   In `ui/index.html`, the Document Inspector displays the image with zoom and pan controls alongside the extraction rules.
+
+---
+
+### Navigating the Interactive Dashboard
+
+When the pipeline finishes, it generates a standalone HTML file at `ui/index.html`. You can open this file in any web browser to inspect the results across five tabs:
+
+1. **Document & Rubric Inspector**: View the raw document (PDF pages or image scan) alongside the rubric verification criteria.
+2. **Primary Extraction**: Inspect the initial candidate extraction, token diagnostics, and extraction parameters.
+3. **Judge Panel Matrix**: View a 5-column side-by-side comparison of all five judges, including their individual reasoning steps, citations, and failure mode detections.
+4. **Consensus & Routing**: Review consensus summary cards, field-by-field agreement ratios, confidence tiers, and the validated clean data payload ready for export.
+5. **Provenance & Audit Trail**: Access the full timestamped JSON audit log with copy-to-clipboard and file download options.
 
 ---
 
@@ -276,17 +319,21 @@ This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`
 ### Invocation & Best Practices
 
 1. **Invoke via Slash Command or Prompt**:
-   You can invoke the skill directly using the registered slash command:
+   You can invoke the skill directly using the registered slash command with a PDF document or raw image file (`.jpg`, `.jpeg`, `.png`, `.webp`, `.heic`):
    ```text
-   /pdf-llm-as-judge <PATH_TO_PDF> <PATH_TO_RUBRIC_JSON>
+   /pdf-llm-as-judge <PATH_TO_PDF_OR_IMAGE> <PATH_TO_RUBRIC_JSON>
    ```
 
-2. **Always Reference File Paths Directly (Avoid Uploading JSON Attachments)**:
+2. **Supported File Formats**:
+   - **PDF**: Multi-page PDF documents (e.g. `samples/cancer_screening_lab_report.pdf`, `samples/healthcare_patient_intake_form.pdf`).
+   - **Images**: High-resolution image scans in JPEG, PNG, WebP, or HEIC formats (e.g. `samples/cancer_screening_lab_report.jpg`).
+
+3. **Always Reference File Paths Directly (Avoid Uploading JSON Attachments)**:
    > [!IMPORTANT]
-   > **Provide file paths directly in your prompt text** (e.g., `samples/cancer_screening_lab_report.pdf` and `samples/rubric_spec_cancer_screening_lab_report.json`).
+   > **Provide file paths directly in your prompt text** (e.g., `samples/cancer_screening_lab_report.jpg` and `samples/rubric_spec_cancer_screening_lab_report.json`).
    > Do **not** attach or upload the `.json` rubric file as a chat media attachment. Vertex AI and Gemini APIs do not support `application/json` as an `inlineData` media attachment type and will return `HTTP 400 Bad Request`.
 
-3. **Customizing Models & Judge Parameters**:
+4. **Customizing Models & Judge Parameters**:
    You can customize the models used for extraction and judging directly in your prompt or command:
    - **`--extractor-model`**: Stage 1 Primary Extraction model (default: `gemini-3.8-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
    - **`--judge-model`**: Stage 2 Judge Panel model (default: `gemini-3.6-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
@@ -297,34 +344,39 @@ This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`
 
 ### Sample Prompts for Agent Harnesses
 
-#### 1. Cancer Screening Lab Report (Default Models)
+#### 1. Cancer Screening Lab Report (PDF Input)
 ```text
 /pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json
 ```
 
-#### 2. Healthcare Intake Form (Default Models)
+#### 2. Cancer Screening Lab Report (Image Input - JPEG)
+```text
+/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json
+```
+
+#### 3. Healthcare Intake Form (Default Models)
 ```text
 /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
 ```
 
-#### 3. Custom Model Selection (Explicit Flash & Pro Pairing)
+#### 4. Custom Model Selection (Explicit Flash & Pro Pairing on Image)
 ```text
-/pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-3.8-flash --judge-model gemini-3.6-flash --thinking-budget 2048
+/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-3.8-flash --judge-model gemini-3.6-flash --thinking-budget 2048
 ```
 
-#### 4. High-Reasoning Deep Evaluation (Higher Thinking Budget)
+#### 5. High-Reasoning Deep Evaluation (Higher Thinking Budget)
 ```text
 /pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-2.5-pro --judge-model gemini-2.5-pro --thinking-budget 4096 --num-judges 5
 ```
 
-#### 5. Natural Language Prompt with Output Specification
+#### 6. Natural Language Prompt for Image Input with Output Specification
 ```text
-Extract all clinical and demographic fields from samples/cancer_screening_lab_report.pdf using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.6-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at ui/index.html.
+Extract all clinical and demographic fields from the scan samples/cancer_screening_lab_report.jpg using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.6-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at ui/index.html.
 ```
 
-#### 6. Evaluating Pre-Extracted Candidate JSON
+#### 7. Evaluating Pre-Extracted Candidate JSON Against an Image Document
 ```text
-/pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json --candidate-json samples/expected_candidate_healthcare_patient_intake_form.json
+/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json --candidate-json samples/expected_candidate_cancer_screening_lab_report.json
 ```
 
 ---
