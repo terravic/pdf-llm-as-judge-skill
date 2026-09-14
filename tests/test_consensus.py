@@ -175,3 +175,146 @@ def test_degraded_quorum_resilience():
     assert fc.total_judges == 4
     assert fc.status == StatusClassification.UNANIMOUS_PASS
     assert fc.accepted_value == "Val"
+
+
+def test_phantom_dissent_exact_match_reconciliation():
+    """Test that when dissenting judges propose the exact candidate value, it reconciles to PASS."""
+    engine = ConsensusEngine()
+    reports = [
+        JudgeReport(
+            judge_id="judge_1",
+            model_name="gemini-3.6-flash",
+            thinking_budget=2048,
+            evaluations=[
+                JudgeEvaluation(
+                    field_name="patient.dob",
+                    syntactic_check=CheckResult.PASS,
+                    grounding_check=CheckResult.PASS,
+                    verdict=CheckResult.PASS,
+                    failure_mode="NONE",
+                    justification="Verified on page 1",
+                    proposed_correction=None,
+                )
+            ],
+        ),
+        JudgeReport(
+            judge_id="judge_2",
+            model_name="gemini-3.6-flash",
+            thinking_budget=2048,
+            evaluations=[
+                JudgeEvaluation(
+                    field_name="patient.dob",
+                    syntactic_check=CheckResult.PASS,
+                    grounding_check=CheckResult.PASS,
+                    verdict=CheckResult.PASS,
+                    failure_mode="NONE",
+                    justification="Verified on page 1",
+                    proposed_correction=None,
+                )
+            ],
+        ),
+        JudgeReport(
+            judge_id="judge_3",
+            model_name="gemini-3.6-flash",
+            thinking_budget=2048,
+            evaluations=[
+                JudgeEvaluation(
+                    field_name="patient.dob",
+                    syntactic_check=CheckResult.FAIL,
+                    grounding_check=CheckResult.FAIL,
+                    verdict=CheckResult.FAIL,
+                    failure_mode="CHAR_RECOGNITION_ERROR",
+                    justification="Raw document reads 2/3/1944 without leading zeros.",
+                    proposed_correction="02/03/1944",  # Matches candidate!
+                )
+            ],
+        ),
+        JudgeReport(
+            judge_id="judge_4",
+            model_name="gemini-3.6-flash",
+            thinking_budget=2048,
+            evaluations=[
+                JudgeEvaluation(
+                    field_name="patient.dob",
+                    syntactic_check=CheckResult.FAIL,
+                    grounding_check=CheckResult.FAIL,
+                    verdict=CheckResult.FAIL,
+                    failure_mode="CONFUSED_WITH_OTHER_DATES",
+                    justification="Handwritten 2 3 1944 should be 02/03/1944.",
+                    proposed_correction="02/03/1944",  # Matches candidate!
+                )
+            ],
+        ),
+        JudgeReport(
+            judge_id="judge_5",
+            model_name="gemini-3.6-flash",
+            thinking_budget=2048,
+            evaluations=[
+                JudgeEvaluation(
+                    field_name="patient.dob",
+                    syntactic_check=CheckResult.PASS,
+                    grounding_check=CheckResult.PASS,
+                    verdict=CheckResult.PASS,
+                    failure_mode="NONE",
+                    justification="Verified on page 1",
+                    proposed_correction=None,
+                )
+            ],
+        ),
+    ]
+
+    fc = engine.evaluate_field("patient.dob", "02/03/1944", reports)
+    # The 2 phantom dissents should be reconciled so agreement count is 5/5
+    assert fc.agreement_count == 5
+    assert fc.total_judges == 5
+    assert fc.agreement_ratio == 1.0
+    assert fc.status == StatusClassification.UNANIMOUS_PASS
+    assert fc.routing_action == RoutingAction.AUTO_ACCEPT
+    assert fc.accepted_value == "02/03/1944"
+    assert len(fc.dissent_reasons) == 0
+
+
+def test_phantom_dissent_date_format_normalization_reconciliation():
+    """Test that date formatting differences (e.g. 2/3/1944 vs 02/03/1944) reconcile to PASS."""
+    engine = ConsensusEngine()
+    reports = [
+        JudgeReport(
+            judge_id="judge_1",
+            model_name="gemini-3.6-flash",
+            thinking_budget=2048,
+            evaluations=[
+                JudgeEvaluation(
+                    field_name="dob",
+                    syntactic_check=CheckResult.PASS,
+                    grounding_check=CheckResult.PASS,
+                    verdict=CheckResult.PASS,
+                    failure_mode="NONE",
+                    justification="Verified",
+                    proposed_correction=None,
+                )
+            ],
+        ),
+        JudgeReport(
+            judge_id="judge_2",
+            model_name="gemini-3.6-flash",
+            thinking_budget=2048,
+            evaluations=[
+                JudgeEvaluation(
+                    field_name="dob",
+                    syntactic_check=CheckResult.FAIL,
+                    grounding_check=CheckResult.FAIL,
+                    verdict=CheckResult.FAIL,
+                    failure_mode="FORMAT_MISMATCH",
+                    justification="Raw text is 2/3/1944",
+                    proposed_correction="2/3/1944",
+                )
+            ],
+        ),
+    ]
+
+    fc = engine.evaluate_field("dob", "02/03/1944", reports)
+    assert fc.agreement_count == 2
+    assert fc.total_judges == 2
+    assert fc.status == StatusClassification.UNANIMOUS_PASS
+    assert fc.accepted_value == "02/03/1944"
+

@@ -89,6 +89,7 @@ The skill generates a standalone, responsive UI dashboard (`ui/index.html`) upon
 
 ```
 pdf-llm-as-judge-skill/
+├── .gitignore                                      # Git ignore rules
 ├── SKILL.md                                        # Main skill instruction file for AI agents
 ├── plugin.json                                     # Plugin registration manifest
 ├── README.md                                       # Project documentation

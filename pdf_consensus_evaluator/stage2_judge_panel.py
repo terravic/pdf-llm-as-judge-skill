@@ -56,7 +56,8 @@ class Stage2JudgePanel:
             f"Rubric Version: {rubric.rubric_version}\n\n"
             f"Your Core Duties:\n"
             f"1. Syntactic Verification: Check if candidate values satisfy type, regex patterns, token count, and required constraints.\n"
-            f"2. Semantic Grounding: Deeply inspect the source visual document/image (including form structures, table grids, checkboxes, handwritten notes/cursive, and strike-through corrections) to confirm that the extracted value factually matches the document without hallucination, transposition, field mix-up, or misattribution.\n\n"
+            f"2. Semantic Grounding & Normalization: Deeply inspect the source visual document/image (including form structures, table grids, checkboxes, handwritten notes/cursive, and strike-through corrections) to confirm that the extracted value factually matches the document without hallucination, transposition, field mix-up, or misattribution. Crucial: Standard format normalization required by the rubric (e.g. converting raw or handwritten dates like '2 3 1944' or '2/3/1944' into the required rubric format '02/03/1944' or 'YYYY-MM-DD', trimming whitespace, standardizing delimiters) is EXPECTED and must PASS semantic grounding.\n"
+            f"3. Consistency Requirement: If your reasoning confirms that the candidate value is correct according to the rubric format, or if your proposed correction would be identical/equivalent to the candidate extraction, your verdict MUST be 'PASS' and proposed_correction MUST be null.\n\n"
             f"For every evaluated field, produce:\n"
             f"- field_name: Target attribute name.\n"
             f"- syntactic_check: 'PASS' or 'FAIL'.\n"
@@ -64,7 +65,7 @@ class Stage2JudgePanel:
             f"- verdict: 'PASS' if and only if both syntactic and grounding checks pass; otherwise 'FAIL'.\n"
             f"- failure_mode: 'NONE' if PASS, or one of the rubric failure modes / ['FORMAT_MISMATCH', 'MISSING_VALUE', 'HALLUCINATION', 'WRONG_ENTITY', 'UNREADABLE_SOURCE', 'ILLEGIBLE_HANDWRITING', 'CHECKBOX_MISINTERPRETED', 'HANDWRITTEN_CORRECTION_IGNORED'].\n"
             f"- justification: Concise reasoning citing exact page number, section, checkbox state, or handwritten line from the document.\n"
-            f"- proposed_correction: The actual correct value from the document if candidate was marked FAIL, or null if PASS.\n\n"
+            f"- proposed_correction: The actual correct value from the document ONLY if candidate was marked FAIL and differs from candidate value; otherwise null if PASS.\n\n"
             f"Output must be a valid JSON object containing an 'evaluations' list of objects conforming to the schema."
         )
 

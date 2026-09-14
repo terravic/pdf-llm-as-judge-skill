@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 import json
 import logging
+import re
 from typing import Any, Dict, List, Optional, Tuple
 
 from pdf_consensus_evaluator.models import (
@@ -19,6 +20,49 @@ from pdf_consensus_evaluator.models import (
 )
 
 logger = logging.getLogger("pdf_consensus_evaluator.stage3")
+
+
+def normalize_comparable_value(val: Any) -> str:
+    """Normalizes candidate or proposed values for semantic equivalence checking."""
+    if val is None:
+        return ""
+    if isinstance(val, bool):
+        return str(val).lower()
+    if isinstance(val, (int, float)):
+        return str(val)
+    if isinstance(val, (dict, list)):
+        return json.dumps(val, sort_keys=True, default=str).strip().lower()
+
+    s = str(val).strip()
+    s_cleaned = re.sub(r"\s+", " ", s).lower()
+    return s_cleaned
+
+
+def is_value_equivalent(candidate: Any, proposed: Any) -> bool:
+    """Checks whether a proposed correction is equivalent to the candidate value."""
+    if candidate is None or proposed is None:
+        return False
+    if candidate == proposed:
+        return True
+
+    norm_cand = normalize_comparable_value(candidate)
+    norm_prop = normalize_comparable_value(proposed)
+    if norm_cand == norm_prop and norm_cand != "":
+        return True
+
+    # Check date variations (e.g. leading zero date differences like 2/3/1944 vs 02/03/1944)
+    cand_date_parts = re.split(r"[/ \-.]", norm_cand)
+    prop_date_parts = re.split(r"[/ \-.]", norm_prop)
+    if len(cand_date_parts) == 3 and len(prop_date_parts) == 3:
+        try:
+            cand_ints = [int(p) for p in cand_date_parts if p.isdigit()]
+            prop_ints = [int(p) for p in prop_date_parts if p.isdigit()]
+            if len(cand_ints) == 3 and len(prop_ints) == 3 and cand_ints == prop_ints:
+                return True
+        except (ValueError, TypeError):
+            pass
+
+    return False
 
 
 class ConsensusEngine:
@@ -70,10 +114,23 @@ class ConsensusEngine:
                 None,
             )
 
-            if field_eval is not None and field_eval.verdict == CheckResult.PASS:
-                passes += 1
-            else:
-                if field_eval is not None:
+            if field_eval is not None:
+                is_pass = field_eval.verdict == CheckResult.PASS
+                # Reconcile phantom dissent where judge voted FAIL but proposed correction is equivalent to candidate
+                if not is_pass and field_eval.proposed_correction is not None:
+                    if is_value_equivalent(candidate_value, field_eval.proposed_correction):
+                        logger.info(
+                            "Stage 3 Consensus: Reconciled phantom dissent for field '%s' from %s (proposed '%s' == candidate '%s')",
+                            field_name,
+                            report.judge_id,
+                            field_eval.proposed_correction,
+                            candidate_value,
+                        )
+                        is_pass = True
+
+                if is_pass:
+                    passes += 1
+                else:
                     if field_eval.failure_mode and field_eval.failure_mode != "NONE":
                         failure_modes.append(field_eval.failure_mode)
                     if field_eval.justification:
@@ -82,11 +139,11 @@ class ConsensusEngine:
                         )
                     if field_eval.proposed_correction is not None:
                         proposed_corrections.append(field_eval.proposed_correction)
-                else:
-                    dissent_reasons.append(
-                        f"[{report.judge_id}] Field omitted from judge output"
-                    )
-                    failure_modes.append("MISSING_VALUE")
+            else:
+                dissent_reasons.append(
+                    f"[{report.judge_id}] Field omitted from judge output"
+                )
+                failure_modes.append("MISSING_VALUE")
 
         ratio = passes / total_judges
 
