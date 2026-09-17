@@ -49,15 +49,15 @@ High-stakes document extraction requires both high throughput and rigorous valid
 1. **Stage 1: Primary Multimodal Extraction**
    - High-throughput multimodal parsing using `gemini-3.8-flash` with thinking budget set to 0.
    - Natively processes form structures, tabular grids, fill-in-the-blank fields, checkboxes, and handwritten entries (print or cursive) alongside digital text.
-   - Leverages handwritten text ink color and stroke contrast (e.g., blue or black pen ink vs. pre-printed template ink) to accurately extract characters, words, and numbers that touch or overlap printed form lines, boxes, or template labels.
+   - Leverages template subtraction (mentally subtracting rigid comb dividers and baseline ticks) and pen ink contrast to isolate genuine handwritten characters from touching or overlapping printed form lines, boxes, or template labels.
    - Converts the verification rubric criteria into structural schema instructions.
    - Emits a raw candidate JSON payload.
 
 2. **Stage 2: Parallel LLM-as-a-Judge Panel**
    - Spawns five parallel, isolated judge calls using `gemini-3.6-flash` with active reasoning (`thinking_budget: 2048` tokens) and sample diversity.
+   - Executes an **Adversarial Forensic Protocol** within the thinking budget: maps repeating template baseline/comb intervals, isolates pen strokes via template subtraction, falsifies optical conflation artifacts (e.g. baseline ticks or comb dividers misread as character stems), and overturns erroneous candidates.
    - Evaluates syntactic rules (data types, regex patterns, token lengths) and visual semantic grounding against the original document pages.
-   - Inspects visual nuances such as handwriting legibility, ink color differentiation against overlapping printed form elements, checkbox markings, and handwritten strikethrough corrections.
-   - Detects specific failure modes (e.g., `HALLUCINATION`, `FORMAT_MISMATCH`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`, `DIGIT_TRANSPOSITION`, `SECONDARY_CODE_EXTRACTED_AS_PRIMARY`, `ILLEGIBLE_HANDWRITING`, `CHECKBOX_MISINTERPRETED`).
+   - Detects specific failure modes (e.g., `TEMPLATE_INK_CONFLATION`, `HALLUCINATION`, `FORMAT_MISMATCH`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`, `DIGIT_TRANSPOSITION`, `SECONDARY_CODE_EXTRACTED_AS_PRIMARY`, `ILLEGIBLE_HANDWRITING`, `CHECKBOX_MISINTERPRETED`).
 
 3. **Stage 3: Deterministic Consensus and Routing**
    - Post-processes judge verdicts into consensus metrics without extra model calls.

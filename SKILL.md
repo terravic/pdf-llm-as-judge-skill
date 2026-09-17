@@ -17,13 +17,13 @@ The skill coordinates a three-stage pipeline:
 1. **Stage 1: Primary Multimodal Extraction**
    - High-throughput multimodal model (`gemini-3.8-flash`) parses the PDF document or image file with thinking tokens disabled (`thinking_budget: 0`).
    - Multimodal perception natively processes complex form grids, checkboxes, filled-in blank lines, and handwritten notes/cursive alongside typed vector text.
-   - When handwritten text is detected on forms, the extractor leverages stroke characteristics and ink color/contrast (such as blue or black pen ink vs. pre-printed template ink) to distinguish handwritten words, characters, and numbers from touching or overlapping printed form lines, boxes, and template labels.
+   - When handwritten text is detected on forms, the extractor leverages template subtraction (mentally subtracting rigid comb dividers and baseline ticks) and stroke ink color/contrast (such as blue or black pen ink vs. pre-printed template ink) to distinguish genuine pen strokes from touching or overlapping printed form lines, comb tick marks, boxes, and template labels.
    - Generates an initial candidate JSON object adhering to the target field schema.
 
 2. **Stage 2: Parallel 5x Thinking Judge Panel**
    - Spawns 5 concurrent, isolated instances of `gemini-3.6-flash` with thinking budget enabled (`thinking_budget: 2048+`).
    - Each judge independently cross-references the candidate extraction against both the raw visual document/image and the verification rubric (syntactic rules and semantic grounding criteria).
-   - Judges inspect visual features (including handwriting clarity, ink color differentiation against overlapping form rules, checkbox status, and strikethrough corrections) and return verdicts, failure modes, visual citations, and proposed corrections.
+   - Judges execute an **Adversarial Forensic Protocol** within their thinking process to falsify potential template-ink conflation errors (e.g. baseline comb ticks or vertical dividers misread as character stems). Judges inspect visual features, overturn conflated characters, and return verdicts, failure modes (including `TEMPLATE_INK_CONFLATION`), visual citations, and proposed corrections.
 
 3. **Stage 3: Consensus Aggregation and Routing**
    - Deterministic post-processing computes field agreement ratios (k / 5 passes).
@@ -36,10 +36,26 @@ The skill coordinates a three-stage pipeline:
 
 ### Handwritten Text & Overlapping Form Element Guidelines
 
-When processing forms containing handwritten text (in PDF or image format):
-- **Ink Color & Contrast Discrimination**: When handwritten text is detected, the model must inspect the ink color, stroke hue, tone, and pigment variations (e.g., blue or black ballpoint/gel/fountain pen ink vs. pre-printed black or grey form lines, field borders, or underline rules).
-- **Touching & Overlapping Stroke Resolution**: In dense form fields where handwritten strokes touch, cross, or overlap printed lines, boxes, or template label text, use the distinct ink color and stroke path of the handwriting to accurately isolate and recognize characters, digits, and words without truncating them or conflating them with printed form elements.
-- **Preservation of Other Document Types**: This guideline specifically targets handwritten entries on forms and does not modify the ability of the skill to process other document types (such as standard typed PDFs, digital vector documents, or image scans without handwriting), which continue to be extracted with standard high precision.
+When processing forms containing handwritten text (in PDF or image format), especially structured forms with segmented boxes, comb dividers, or baseline tick marks:
+
+#### 1. Extractor Template Subtraction
+- **Visual Subtraction**: When extracting from segmented boxes or comb-tick fields, mentally subtract rigid pre-printed template marks before recognizing glyphs.
+- **Ink Color & Contrast**: Use pen ink characteristics (natural curvature, ink saturation, pressure taper, blue/black ballpoint/gel pigment) to isolate handwriting from touching or overlapping printed form elements.
+
+#### 2. Adversarial Forensic Judge Protocol (Thinking Process)
+Judges must utilize their 2048+ token thinking budget to execute this 4-step adversarial protocol to falsify potential OCR/extraction errors caused by template-ink conflation:
+1. **Template Baseline Mapping**: Identify repeating pre-printed elements (box borders, baseline ticks, comb dividers) and calculate their periodic intervals and grid spacing.
+2. **Forensic Stroke Isolation**: Mentally subtract all pre-printed template lines. For every character where an ascender, descender, or vertical stem aligns with a known template tick interval, perform a stroke continuity test: does the stroke exhibit genuine pen ink characteristics (curvature, taper, saturation, pressure variations), or does it directly align with and rely on the rigid, pre-printed template mark?
+3. **Conflation Falsification Check**: Specifically test whether the candidate character is an optical artifact of a simpler glyph touching a printed mark:
+   - Is an alleged `'a'` actually an `'o'` touching a baseline tick mark?
+   - Is an alleged `'4'` actually a `'C'` or `'L'` touching a vertical comb tick?
+   - Is an alleged `'d'` or `'q'` actually an `'o'` intersecting a vertical divider?
+   - Is an alleged `'H'` actually two separate characters or an `'I'`/`'1'` touching a vertical cell wall?
+   - Is an alleged `'B'` or `'8'` an open loop (such as `'3'` or `'C'`) touching a cell boundary?
+4. **Verdict Determination & True Ink Overturn**: If any character in the candidate extraction relies on a pre-printed form mark to justify its classification, the judge MUST fail the grounding check (`FAIL`), fail the verdict (`FAIL`), assign `failure_mode: "TEMPLATE_INK_CONFLATION"`, detail the falsification in `justification`, and output the true ink-only value in `proposed_correction`.
+
+#### 3. Preservation of Other Document Types
+This adversarial protocol and template subtraction specifically target handwritten entries on structured forms and comb layouts. It does not modify or degrade the skill's ability to process other document types (such as standard typed PDFs, digital vector documents, molecular lab reports, or image scans without handwriting), which continue to be extracted and verified with standard high precision.
 
 ---
 
