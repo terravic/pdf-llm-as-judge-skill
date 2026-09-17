@@ -52,7 +52,7 @@ class Stage1Extractor:
             f"Your task is to inspect the attached document (PDF or image) and extract the specified target fields into a valid JSON object.\n\n"
             f"Target Fields:\n{schema_text}\n\n"
             f"Extraction Rules & Multimodal Form Guidelines:\n"
-            f"1. Form Structures & Handwritten Text: Accurately read printed text, fill-in-the-blank entries, handwritten cursive/print, numbers, and notes within structured or semi-structured form layouts.\n"
+            f"1. Form Structures & Handwritten Text: Accurately read printed text, fill-in-the-blank entries, handwritten cursive/print, numbers, and notes within structured or semi-structured form layouts. When handwritten text is detected on forms, examine the handwritten text ink color, stroke tone, and pigment (e.g., blue or black ballpoint/gel pen ink vs. pre-printed template ink) to visually isolate handwritten strokes and better recognize words, characters, or numbers—especially where printed lines, underlines, bounding boxes, or template labels touch or overlap the handwritten text. For standard digital PDFs or documents without handwriting, perform standard extraction without altering normal document processing.\n"
             f"2. Checkboxes & Selection Controls: Accurately identify checkmarks, crossed boxes, filled circles/radio buttons, and distinct checked vs unchecked states.\n"
             f"3. Strikethroughs & Corrections: If handwritten text has been crossed out or corrected with an updated value nearby, extract the final intended correction.\n"
             f"4. Ambiguity Resolution: Use visual context and schema rules (e.g., date formats, numeric ranges) to disambiguate unclear handwriting without hallucinating.\n"
