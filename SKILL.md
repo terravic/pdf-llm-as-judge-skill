@@ -54,8 +54,21 @@ Judges must utilize their 2048+ token thinking budget to execute this 4-step adv
    - Is an alleged `'B'` or `'8'` an open loop (such as `'3'` or `'C'`) touching a cell boundary?
 4. **Verdict Determination & True Ink Overturn**: If any character in the candidate extraction relies on a pre-printed form mark to justify its classification, the judge MUST fail the grounding check (`FAIL`), fail the verdict (`FAIL`), assign `failure_mode: "TEMPLATE_INK_CONFLATION"`, detail the falsification in `justification`, and output the true ink-only value in `proposed_correction`.
 
-#### 3. Preservation of Other Document Types
-This adversarial protocol and template subtraction specifically target handwritten entries on structured forms and comb layouts. It does not modify or degrade the skill's ability to process other document types (such as standard typed PDFs, digital vector documents, molecular lab reports, or image scans without handwriting), which continue to be extracted and verified with standard high precision.
+#### 3. Surgical ROI Cropping & Comb-Line Suppression Pipeline (Pre-printed Forms)
+When processing pre-printed forms containing segmented character comb boxes with baseline tick marks or dividers (e.g., ID numbers, postal codes, account numbers):
+- **Problem**: Full-page downsampling causes small comb boxes (<1.5% of total page area) to blend baseline tick marks with handwritten pen strokes, leading to false optical conflation (e.g., 'C' touching a tick misclassified as '4', or 'o' touching a tick misclassified as 'a').
+- **Dual-Engine Filtering (`utils/comb_filter.py`)**:
+  - `crop_field_roi`: Surgically crops the field region based on normalized coordinates `[ymin, xmin, ymax, xmax]` with a 3% contextual padding, preserving original native scan resolution without downsampling artifacts.
+  - `suppress_comb_lines`: Applies color space thresholding to isolate near-neutral template gray/black marks (saturation `< 28`, value `> 45`) and selectively bleaches them to background white (`255`), while strictly protecting saturated colored pen ink (such as blue or colored ballpoint/gel pens) and enhancing pen stroke contrast. The implementation automatically uses OpenCV when available, with an identical fallback using native Pillow and NumPy.
+- **Rubric Specification Support**:
+  - Rubrics configure comb fields with `field_type: "segmented_comb_box"` and `bounding_box: [ymin, xmin, ymax, xmax]`.
+- **Slot-by-Slot Transcription Prompting (Stage 1 Extractor)**:
+  - Dispatches isolated high-resolution crop payloads to the multimodal extractor with a slot-by-slot alignment schema.
+- **Forensic Comb Audit & Overrule (Stage 2 Judge Panel)**:
+  - Judges audit candidate extractions against the high-resolution crop, falsify template-ink conflations (e.g., `'4'` -> `'C'`, `'a'` -> `'o'`), and overrule candidate values with `failure_mode: "TEMPLATE_INK_CONFLATION"` and true ink corrections.
+
+#### 4. Preservation of Other Document Types
+This adversarial protocol, surgical comb cropping, and template subtraction specifically target handwritten entries on structured forms and comb layouts. It does not modify or degrade the skill's ability to process other document types (such as standard typed PDFs, digital vector documents, molecular lab reports, or image scans without handwriting), which continue to be extracted and verified with standard high precision.
 
 ---
 
@@ -78,9 +91,9 @@ Features (Organized across 5 tabs from left to right):
 When a user requests document extraction and verification:
 
 ### Step 1: Authentication & Environment
-The pipeline natively supports both Cloud ADC and AI Studio:
-- **Cloud ADC (Default / Recommended)**: If the user is authenticated via Application Default Credentials (`gcloud auth application-default login` or active `gcloud` session), the pipeline automatically resolves credentials and routes requests. **Do NOT prompt the user for an API key** if ADC or `gcloud` is available.
-- **AI Studio (Alternative)**: If `GEMINI_API_KEY` is present in the environment or passed via `--api-key`, the client will use the AI Studio endpoint.
+The pipeline supports Application Default Credentials (ADC) and API key authentication:
+- **Application Default Credentials (ADC) (Recommended)**: If authenticated via Application Default Credentials (`gcloud auth application-default login`), the pipeline automatically resolves credentials and routes requests. Do not prompt for an API key if ADC is available.
+- **API Key**: If `GEMINI_API_KEY` is present in the environment or passed via `--api-key`, the client will use the API key endpoint.
 
 ### Step 2: Verify Input Files
 Check that the required input files exist:
@@ -145,5 +158,6 @@ Read the generated output JSON and present a clear summary:
 - Pipeline Runner: [scripts/run_pipeline.py](scripts/run_pipeline.py)
 - Candidate Evaluator: [scripts/evaluate_candidate.py](scripts/evaluate_candidate.py)
 - Core Pipeline Orchestrator: [pdf_consensus_evaluator/pipeline.py](pdf_consensus_evaluator/pipeline.py)
+- Comb Line Filtering Utility: [utils/comb_filter.py](utils/comb_filter.py)
 - Sample PDF: [samples/healthcare_patient_intake_form.pdf](samples/healthcare_patient_intake_form.pdf)
 - Sample Rubric Spec: [samples/rubric_spec_healthcare_patient_intake_form.json](samples/rubric_spec_healthcare_patient_intake_form.json)

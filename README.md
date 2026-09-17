@@ -1,6 +1,6 @@
 # Multi-Agent Document Extraction and Consensus Evaluator
 
-A production-grade, agentic document intelligence system that extracts structured data from PDF files and high-resolution images (including form structures with handwritten text, checkboxes, and fill-in-the-blank entries), evaluates candidate extractions using an ensemble panel of five parallel thinking-enabled LLM judges, and deterministically computes field-level consensus scores and routing decisions.
+A multi-agent document extraction and consensus evaluation system that extracts structured data from PDF files and high-resolution images (including form structures with handwritten text, checkboxes, and fill-in-the-blank entries), evaluates candidate extractions using an ensemble panel of five parallel thinking-enabled LLM judges, and deterministically computes field-level consensus scores and routing decisions.
 
 Compatible with any modern AI agent harness supporting standard agent skills, plugins, and interactive UI dashboard rendering.
 
@@ -70,6 +70,27 @@ High-stakes document extraction requires both high throughput and rigorous valid
 | 3 / 5 | CONTESTED | Split Verdict (~60%) | Route to Human-in-the-Loop (HITL) |
 | <= 2 / 5 | REJECTED | Low Confidence / Failure | Flag for Extraction Failure / Resubmission |
 
+### Surgical ROI Cropping & Comb-Line Suppression for Pre-Printed Forms
+
+Structured forms frequently employ segmented character comb boxes with baseline tick marks or dividers (such as ID numbers, postal codes, and policy numbers). Downsampling full-page high-resolution scans often causes small comb boxes (<1.5% of total page area) to visually conflate baseline tick marks with handwritten pen strokes (for example, misinterpreting an open 'C' or 'o' touching a vertical tick mark as '4' or 'a').
+
+To resolve this without altering standard document processing pipelines:
+
+1. **High-Resolution Surgical Cropping (`crop_field_roi`)**:
+   - Rubric criteria define `field_type: "segmented_comb_box"` and normalized coordinates `bounding_box: [ymin, xmin, ymax, xmax]`.
+   - The region is cropped at full scan resolution with 3% contextual boundary padding to prevent edge clipping.
+
+2. **Dual-Engine Color Space Comb Suppression (`suppress_comb_lines`)**:
+   - Isolates near-neutral template gray/black ink (saturation `< 28`, value `> 45`) in HSV color space and selectively bleaches it to background white (`255`).
+   - Strictly preserves high-saturation pen ink (such as blue, purple, or colored ballpoint/gel ink) while enhancing contrast for dark black pen strokes.
+   - Automatically executes using OpenCV if available, with an identical fallback implementation using native Pillow and NumPy.
+
+3. **Stage 1 Extractor Slot-by-Slot Transcription**:
+   - The extractor passes the cropped and bleached ROI directly to the multimodal model with explicit slot-by-slot transcription instructions.
+
+4. **Stage 2 Adversarial Forensic Comb Audit**:
+   - The parallel judge panel independently audits the candidate value against the cropped ROI payload, specifically testing for template tick mark conflation and overturning false positive glyphs with `failure_mode: "TEMPLATE_INK_CONFLATION"`.
+
 ---
 
 ## Interactive UI Dashboard
@@ -116,6 +137,9 @@ pdf-llm-as-judge-skill/
 │   ├── dashboard_generator.py                      # HTML Dashboard generator
 │   ├── pipeline.py                                 # End-to-end pipeline orchestrator
 │   └── cli.py                                      # Command-line interface logic
+├── utils/
+│   ├── __init__.py                                 # Utilities package root
+│   └── comb_filter.py                              # Surgical ROI cropping and comb line suppression
 ├── samples/
 │   ├── healthcare_patient_intake_form.pdf          # Patient intake form sample PDF
 │   ├── rubric_spec_healthcare_patient_intake_form.json # Intake form rubric specification
@@ -131,7 +155,9 @@ pdf-llm-as-judge-skill/
     ├── __init__.py                                 # Test package root
     ├── test_models.py                              # Schema and deserialization tests
     ├── test_consensus.py                           # Consensus calculation and quorum tests
+    ├── test_stage1_and_judge_prompts.py            # Prompt construction and adversarial protocol tests
     ├── test_synthetic_discrepancies.py             # Error injection and rejection tests
+    ├── test_comb_filter.py                         # Comb filter and surgical crop test suite
     └── test_pipeline_e2e.py                        # End-to-end integration and dashboard tests
 ```
 
@@ -156,12 +182,12 @@ All sample files provided in the `samples/` directory are completely synthetic a
    cd pdf-llm-as-judge-skill
    ```
 
-2. Choose your authentication method (Cloud Vertex AI or AI Studio):
+2. Choose your authentication method (Application Default Credentials or API Key):
 
-   #### Option A: Cloud Vertex AI (Default / Enterprise - No API Key Required)
-   If you have a cloud project with Vertex AI enabled, you do not need an API key. Authenticate using Application Default Credentials (ADC):
+   #### Option A: Application Default Credentials (ADC) (Default - No API Key Required)
+   If authenticated via Application Default Credentials, no API key is required:
    ```bash
-   # Log in to Cloud ADC
+   # Log in to ADC
    gcloud auth application-default login
    ```
    - **Project Auto-Detection**: The client automatically detects your active project from `gcloud config get-value project`, your ADC metadata, or `GOOGLE_CLOUD_PROJECT`.
@@ -170,10 +196,10 @@ All sample files provided in the `samples/` directory are completely synthetic a
      export GOOGLE_CLOUD_PROJECT="your-project-id"   # Explicit project override
      export GOOGLE_CLOUD_LOCATION="us-central1"          # Default region (us-central1)
      ```
-   - **Standalone Desktop Apps & Agent Environments**: Since ADC credentials are stored globally at `~/.config/gcloud/application_default_credentials.json`, standalone agent harnesses and background scripts automatically detect your credentials.
+   - **Standalone Environments**: Since ADC credentials are stored globally at `~/.config/gcloud/application_default_credentials.json`, standalone agent harnesses and background scripts automatically detect your credentials.
 
-   #### Option B: AI Studio (API Key)
-   If you prefer using AI Studio developer keys:
+   #### Option B: API Key Authentication
+   To authenticate using an API key:
    ```bash
    export GEMINI_API_KEY="AIzaSy..."
    ```
@@ -240,6 +266,7 @@ pytest -v tests/
 ### Test Coverage Summary:
 - `test_models.py`: Validates rubric parsing, syntactic rules, and judge payload deserialization.
 - `test_consensus.py`: Tests mathematical consensus logic across all confidence tiers (5/5, 4/5, 3/5, 2/5, 1/5, 0/5) and degraded quorums.
+- `test_stage1_and_judge_prompts.py`: Verifies Stage 1 template subtraction rules, Stage 2 Adversarial Forensic Protocol, and failure mode enums.
 - `test_synthetic_discrepancies.py`: Injects invalid SSNs and clinic address mix-ups to verify majority rejection and failure mode attribution.
 - `test_pipeline_e2e.py`: Executes end-to-end pipeline against the sample PDF and generates the UI Dashboard.
 
@@ -333,7 +360,7 @@ This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`
 3. **Always Reference File Paths Directly (Avoid Uploading JSON Attachments)**:
    > [!IMPORTANT]
    > **Provide file paths directly in your prompt text** (e.g., `samples/cancer_screening_lab_report.jpg` and `samples/rubric_spec_cancer_screening_lab_report.json`).
-   > Do **not** attach or upload the `.json` rubric file as a chat media attachment. Vertex AI and Gemini APIs do not support `application/json` as an `inlineData` media attachment type and will return `HTTP 400 Bad Request`.
+   > Do **not** attach or upload the `.json` rubric file as a chat media attachment. Multimodal API endpoints do not accept `application/json` as an `inlineData` binary attachment type and will return `HTTP 400 Bad Request`.
 
 4. **Customizing Models & Judge Parameters**:
    You can customize the models used for extraction and judging directly in your prompt or command:

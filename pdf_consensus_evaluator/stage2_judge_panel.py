@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import json
 import logging
+import os
 import time
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -42,6 +44,55 @@ class Stage2JudgePanel:
         self.num_judges = num_judges
         self.judge_timeout = judge_timeout
         self.base_temperature = base_temperature
+
+    @staticmethod
+    def _is_image_file(path: str) -> bool:
+        ext = os.path.splitext(path)[1].lower()
+        return ext in (".png", ".jpg", ".jpeg", ".tiff", ".bmp", ".webp")
+
+    def build_cropped_comb_judge_prompt(
+        self,
+        field_name: str,
+        candidate_text: str,
+        judge_id: str,
+    ) -> Tuple[str, str]:
+        """Constructs adversarial forensic audit prompt for a cropped segmented comb field."""
+        system_instruction = (
+            f"You are an Adversarial Forensic Judge auditing a segmented comb field transcription.\n"
+            f"Target Field: {field_name}\n"
+            f"Candidate Value: {candidate_text}\n\n"
+            f"AUDIT PROTOCOL:\n"
+            f"1. Grid Alignment Audit: Scan each character slot. Where does each character's vertical/horizontal stem align relative to the bottom tick marks or cell boundaries?\n"
+            f"2. Optical Conflation Test:\n"
+            f"   - Does a character appear to be '4' solely because a handwritten 'C' or 'L' touches a comb tick?\n"
+            f"   - Does a character appear to be 'a', 'd', or 'q' solely because an 'o' touches a comb tick or vertical divider?\n"
+            f"   - Does a character appear to be 'H' solely because two strokes or an 'I' touches a comb line?\n"
+            f"   - Does a character appear to be '8' or 'B' because an open loop touches a boundary?\n"
+            f"3. Stroke Geometry & Continuity: Trace pen curvature and ink pressure. Disregard all tick marks and cell dividers bleached or faint in the background.\n"
+            f"4. Adversarial Overrule: If the candidate value incorporated comb lines into character identity, OVERRULE the candidate.\n\n"
+            f"Output valid JSON conforming to this schema:\n"
+            f"{{\n"
+            f'  "audit_verdict": "CONFIRMED" | "OVERTURNED",\n'
+            f'  "conflated_slots": [\n'
+            f"    {{\n"
+            f'      "slot_index": <int>,\n'
+            f'      "candidate_char": "<char>",\n'
+            f'      "falsification_reason": "<explanation of conflation with tick/comb>",\n'
+            f'      "corrected_char": "<char>"\n'
+            f"    }}\n"
+            f"  ],\n"
+            f'  "final_verified_text": "<string>",\n'
+            f'  "confidence_score": <float 0.0-1.0>,\n'
+            f'  "forensic_notes": "<string>"\n'
+            f"}}"
+        )
+
+        prompt = (
+            f"JUDGE ID: {judge_id}\n\n"
+            f"Audit the candidate value '{candidate_text}' for field '{field_name}' against the attached cropped comb image.\n"
+            f"Return valid JSON conforming to the audit schema."
+        )
+        return system_instruction, prompt
 
     def build_judge_prompt(
         self,
@@ -155,6 +206,84 @@ class Stage2JudgePanel:
             evaluations = [
                 JudgeEvaluation.from_dict(item) for item in eval_list_raw
             ]
+
+            # Surgical Intercept: Audit segmented_comb_box fields on image inputs
+            if self._is_image_file(target_path):
+                comb_fields = [
+                    c for c in rubric.extraction_criteria
+                    if (c.field_type == "segmented_comb_box" or getattr(c.syntactic_rules, "field_type", None) == "segmented_comb_box")
+                    and (c.bounding_box or getattr(c.syntactic_rules, "bounding_box", None))
+                ]
+                for cf in comb_fields:
+                    bbox = cf.bounding_box or getattr(cf.syntactic_rules, "bounding_box", None)
+                    cand_val = candidate_extraction.get(cf.field_name)
+                    if bbox and cand_val is not None:
+                        try:
+                            from utils.comb_filter import prepare_crop_payload
+                            crop_bytes = prepare_crop_payload(target_path, bbox)
+                            crop_b64 = base64.b64encode(crop_bytes).decode("utf-8")
+                            crop_sys, crop_prompt = self.build_cropped_comb_judge_prompt(
+                                field_name=cf.field_name,
+                                candidate_text=str(cand_val),
+                                judge_id=judge_id,
+                            )
+                            logger.info(
+                                "Judge Panel: %s running comb crop audit on field '%s' (candidate='%s')",
+                                judge_id,
+                                cf.field_name,
+                                cand_val,
+                            )
+                            audit_raw = await asyncio.wait_for(
+                                self.client.generate_content_async(
+                                    model=self.model,
+                                    system_instruction=crop_sys,
+                                    prompt=crop_prompt,
+                                    document_b64=crop_b64,
+                                    mime_type="image/png",
+                                    thinking_budget=self.thinking_budget,
+                                    temperature=temperature,
+                                    response_json=True,
+                                ),
+                                timeout=self.judge_timeout,
+                            )
+                            audit_verdict = str(audit_raw.get("audit_verdict", "")).upper()
+                            final_text = audit_raw.get("final_verified_text")
+                            forensic_notes = audit_raw.get("forensic_notes", "")
+
+                            matching_eval = next((e for e in evaluations if e.field_name == cf.field_name), None)
+                            if matching_eval is None:
+                                matching_eval = JudgeEvaluation(
+                                    field_name=cf.field_name,
+                                    syntactic_check=CheckResult.PASS,
+                                    grounding_check=CheckResult.PASS,
+                                    verdict=CheckResult.PASS,
+                                    failure_mode="NONE",
+                                    justification="",
+                                    proposed_correction=None,
+                                )
+                                evaluations.append(matching_eval)
+
+                            if audit_verdict == "OVERTURNED":
+                                matching_eval.grounding_check = CheckResult.FAIL
+                                matching_eval.verdict = CheckResult.FAIL
+                                matching_eval.failure_mode = "TEMPLATE_INK_CONFLATION"
+                                matching_eval.justification = (
+                                    forensic_notes
+                                    or f"Forensic comb audit overturned candidate '{cand_val}': conflated comb lines/tick marks with pen strokes."
+                                )
+                                matching_eval.proposed_correction = final_text
+                            elif audit_verdict == "CONFIRMED":
+                                if matching_eval.failure_mode == "TEMPLATE_INK_CONFLATION":
+                                    matching_eval.grounding_check = CheckResult.PASS
+                                    matching_eval.verdict = (
+                                        CheckResult.PASS if matching_eval.syntactic_check == CheckResult.PASS else CheckResult.FAIL
+                                    )
+                                    matching_eval.failure_mode = "NONE"
+                                    matching_eval.proposed_correction = None
+                                if forensic_notes and not matching_eval.justification:
+                                    matching_eval.justification = forensic_notes
+                        except Exception as e:
+                            logger.warning("Comb crop audit failed for judge %s on '%s': %s", judge_id, cf.field_name, e)
 
             logger.info(
                 "Judge Panel: %s completed in %.2fs (%d fields evaluated)",

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
-from typing import Any, Dict, Optional
+import os
+from typing import Any, Dict, Optional, Tuple
 
 from pdf_consensus_evaluator.gemini_client import GeminiClient
 from pdf_consensus_evaluator.models import RubricSpec
@@ -59,6 +61,40 @@ class Stage1Extractor:
             f"5. Return ONLY a valid JSON object where keys correspond exactly to the requested field names without markdown preamble or commentary."
         )
 
+    def build_cropped_comb_prompt(self, field_name: str) -> Tuple[str, str]:
+        """Constructs prompt for high-resolution cropped comb field extraction."""
+        system_instruction = (
+            "You are an expert handwriting transcription engine evaluating a HIGH-RESOLUTION CROPPED form field.\n\n"
+            "INSTRUCTIONS:\n"
+            "1. TARGET CONTENT: Transcribe human pen ink only.\n"
+            "2. IGNORE FORM ARTIFACTS: Disregard any residual bounding boxes, tick marks, or horizontal baseline rules.\n"
+            "3. CURVATURE VS. TICKS:\n"
+            "   - A continuous counter-clockwise curved stroke open to the right is the letter 'C' (or 'c').\n"
+            "   - Do NOT combine an open curved arc with an intersecting bottom baseline tick to form a digit '4'.\n"
+            "   - An isolated oval loop is '0' or 'O', not an 'a' or 'd'.\n"
+            "4. SLOT MAPPING: Transcribe characters slot-by-slot from left to right.\n\n"
+            "OUTPUT SCHEMA (JSON ONLY):\n"
+            "{\n"
+            '  "segmented_slots": [\n'
+            "    {\n"
+            '      "slot_number": <int>,\n'
+            '      "detected_character": "<char or null>",\n'
+            '      "stroke_confidence": "HIGH" | "MEDIUM" | "LOW"\n'
+            "    }\n"
+            "  ],\n"
+            '  "extracted_text": "<concatenated non-null characters>"\n'
+            "}"
+        )
+        prompt = (
+            f"Transcribe the handwritten characters in this high-resolution cropped field for '{field_name}'. "
+            f"Follow all instructions and return valid JSON adhering to the schema."
+        )
+        return system_instruction, prompt
+
+    def _is_image_file(self, file_path: str) -> bool:
+        ext = os.path.splitext(file_path.lower())[1]
+        return ext in [".jpg", ".jpeg", ".png", ".webp", ".tiff", ".tif", ".heic", ".heif", ".gif"]
+
     def extract(
         self,
         document_path: Optional[str] = None,
@@ -85,7 +121,7 @@ class Stage1Extractor:
             self.temperature,
         )
 
-        return self.client.generate_content(
+        candidate = self.client.generate_content(
             model=self.model,
             system_instruction=system_instruction,
             prompt=prompt,
@@ -94,6 +130,47 @@ class Stage1Extractor:
             temperature=self.temperature,
             response_json=True,
         )
+
+        # Surgical Intercept: Check for segmented_comb_box fields on image inputs
+        if self._is_image_file(target_path):
+            comb_fields = [
+                c for c in rubric.extraction_criteria
+                if (c.field_type == "segmented_comb_box" or getattr(c.syntactic_rules, "field_type", None) == "segmented_comb_box")
+                and (c.bounding_box or getattr(c.syntactic_rules, "bounding_box", None))
+            ]
+            for cf in comb_fields:
+                bbox = cf.bounding_box or getattr(cf.syntactic_rules, "bounding_box", None)
+                if bbox:
+                    try:
+                        from utils.comb_filter import prepare_crop_payload
+                        crop_bytes = prepare_crop_payload(target_path, bbox)
+                        crop_b64 = base64.b64encode(crop_bytes).decode("utf-8")
+                        crop_sys, crop_prompt = self.build_cropped_comb_prompt(cf.field_name)
+
+                        logger.info("Primary Extraction: Running high-res comb crop extraction on field '%s'", cf.field_name)
+                        crop_result = self.client.generate_content(
+                            model=self.model,
+                            system_instruction=crop_sys,
+                            prompt=crop_prompt,
+                            document_b64=crop_b64,
+                            mime_type="image/png",
+                            thinking_budget=0,
+                            temperature=self.temperature,
+                            response_json=True,
+                        )
+                        ext_text = crop_result.get("extracted_text")
+                        if not ext_text and "segmented_slots" in crop_result:
+                            ext_text = "".join(
+                                str(s.get("detected_character", ""))
+                                for s in crop_result["segmented_slots"]
+                                if s.get("detected_character")
+                            )
+                        if ext_text:
+                            candidate[cf.field_name] = ext_text
+                    except Exception as e:
+                        logger.warning("Comb crop extraction failed for '%s': %s", cf.field_name, e)
+
+        return candidate
 
     async def extract_async(
         self,
@@ -121,7 +198,7 @@ class Stage1Extractor:
             self.temperature,
         )
 
-        return await self.client.generate_content_async(
+        candidate = await self.client.generate_content_async(
             model=self.model,
             system_instruction=system_instruction,
             prompt=prompt,
@@ -130,3 +207,44 @@ class Stage1Extractor:
             temperature=self.temperature,
             response_json=True,
         )
+
+        # Surgical Intercept: Check for segmented_comb_box fields on image inputs
+        if self._is_image_file(target_path):
+            comb_fields = [
+                c for c in rubric.extraction_criteria
+                if (c.field_type == "segmented_comb_box" or getattr(c.syntactic_rules, "field_type", None) == "segmented_comb_box")
+                and (c.bounding_box or getattr(c.syntactic_rules, "bounding_box", None))
+            ]
+            for cf in comb_fields:
+                bbox = cf.bounding_box or getattr(cf.syntactic_rules, "bounding_box", None)
+                if bbox:
+                    try:
+                        from utils.comb_filter import prepare_crop_payload
+                        crop_bytes = prepare_crop_payload(target_path, bbox)
+                        crop_b64 = base64.b64encode(crop_bytes).decode("utf-8")
+                        crop_sys, crop_prompt = self.build_cropped_comb_prompt(cf.field_name)
+
+                        logger.info("Primary Extraction (Async): Running high-res comb crop extraction on field '%s'", cf.field_name)
+                        crop_result = await self.client.generate_content_async(
+                            model=self.model,
+                            system_instruction=crop_sys,
+                            prompt=crop_prompt,
+                            document_b64=crop_b64,
+                            mime_type="image/png",
+                            thinking_budget=0,
+                            temperature=self.temperature,
+                            response_json=True,
+                        )
+                        ext_text = crop_result.get("extracted_text")
+                        if not ext_text and "segmented_slots" in crop_result:
+                            ext_text = "".join(
+                                str(s.get("detected_character", ""))
+                                for s in crop_result["segmented_slots"]
+                                if s.get("detected_character")
+                            )
+                        if ext_text:
+                            candidate[cf.field_name] = ext_text
+                    except Exception as e:
+                        logger.warning("Comb crop extraction failed for '%s': %s", cf.field_name, e)
+
+        return candidate

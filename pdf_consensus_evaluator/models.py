@@ -62,6 +62,8 @@ class SyntacticRule:
     format_regex: Optional[str] = None
     masking_allowed: Optional[bool] = None
     expected_subfields: Optional[List[str]] = None
+    field_type: Optional[str] = None
+    bounding_box: Optional[Tuple[float, float, float, float]] = None
 
 
 @dataclass
@@ -76,10 +78,16 @@ class FieldExtractionCriteria:
     field_name: str
     syntactic_rules: SyntacticRule
     semantic_grounding_rules: SemanticGroundingRule
+    field_type: Optional[str] = None
+    bounding_box: Optional[Tuple[float, float, float, float]] = None
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> FieldExtractionCriteria:
         syn_raw = data.get("syntactic_rules", {})
+        field_type = data.get("field_type") or syn_raw.get("field_type")
+        bbox_raw = data.get("bounding_box") or syn_raw.get("bounding_box")
+        bbox = tuple(bbox_raw) if bbox_raw else None
+
         syn = SyntacticRule(
             required=syn_raw.get("required", True),
             type=syn_raw.get("type", "string"),
@@ -87,6 +95,8 @@ class FieldExtractionCriteria:
             format_regex=syn_raw.get("format_regex"),
             masking_allowed=syn_raw.get("masking_allowed"),
             expected_subfields=syn_raw.get("expected_subfields"),
+            field_type=field_type,
+            bounding_box=bbox,
         )
         sem_raw = data.get("semantic_grounding_rules", {})
         sem = SemanticGroundingRule(
@@ -98,6 +108,8 @@ class FieldExtractionCriteria:
             field_name=data["field_name"],
             syntactic_rules=syn,
             semantic_grounding_rules=sem,
+            field_type=field_type,
+            bounding_box=bbox,
         )
 
 

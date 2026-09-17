@@ -150,7 +150,7 @@ class GeminiClient:
         """Constructs the appropriate API endpoint URL and authentication headers."""
         headers = {"Content-Type": "application/json"}
 
-        # Vertex AI endpoint if project_id is configured
+        # Cloud endpoint if project_id is configured
         if self.project_id:
             endpoint = (
                 f"https://{self.location}-aiplatform.googleapis.com/v1/projects/"
