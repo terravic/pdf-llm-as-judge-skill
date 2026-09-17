@@ -226,7 +226,7 @@ class PipelineReport:
     consensus_breakdown: Dict[str, Any]
     audit_trail: List[Dict[str, Any]]
     extractor_model: str = "gemini-3.8-flash"
-    judge_model: str = "gemini-3.6-flash"
+    judge_model: str = "gemini-3.8-flash"
     thinking_budget: int = 2048
     judge_reports: List[Dict[str, Any]] = field(default_factory=list)
 

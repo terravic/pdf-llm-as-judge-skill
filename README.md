@@ -27,7 +27,7 @@ High-stakes document extraction requires both high throughput and rigorous valid
                            v
 +---------------------------------------------------------+
 | Stage 2: Parallel 5x LLM-as-a-Judge Panel               |
-| - Engine: 5x Gemini 3.6 Flash (Thinking Budget: 2048+)  |
+| - Engine: 5x Gemini 3.8 Flash (Thinking Budget: 2048+)  |
 | - Inputs: Source Document + Candidate JSON + Rubric     |
 | - Non-blocking concurrent execution (asyncio)           |
 | - Evaluates visual grounding & handwriting fidelity     |
@@ -54,7 +54,7 @@ High-stakes document extraction requires both high throughput and rigorous valid
    - Emits a raw candidate JSON payload.
 
 2. **Stage 2: Parallel LLM-as-a-Judge Panel**
-   - Spawns five parallel, isolated judge calls using `gemini-3.6-flash` with active reasoning (`thinking_budget: 2048` tokens) and sample diversity.
+   - Spawns five parallel, isolated judge calls using `gemini-3.8-flash` with active reasoning (`thinking_budget: 2048` tokens) and sample diversity.
    - Executes an **Adversarial Forensic Protocol** within the thinking budget: maps repeating template baseline/comb intervals, isolates pen strokes via template subtraction, falsifies optical conflation artifacts (e.g. baseline ticks or comb dividers misread as character stems), and overturns erroneous candidates.
    - Evaluates syntactic rules (data types, regex patterns, token lengths) and visual semantic grounding against the original document pages.
    - Detects specific failure modes (e.g., `TEMPLATE_INK_CONFLATION`, `HALLUCINATION`, `FORMAT_MISMATCH`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`, `DIGIT_TRANSPOSITION`, `SECONDARY_CODE_EXTRACTED_AS_PRIMARY`, `ILLEGIBLE_HANDWRITING`, `CHECKBOX_MISINTERPRETED`).
@@ -70,26 +70,28 @@ High-stakes document extraction requires both high throughput and rigorous valid
 | 3 / 5 | CONTESTED | Split Verdict (~60%) | Route to Human-in-the-Loop (HITL) |
 | <= 2 / 5 | REJECTED | Low Confidence / Failure | Flag for Extraction Failure / Resubmission |
 
-### Surgical ROI Cropping & Comb-Line Suppression for Pre-Printed Forms
+### Surgical ROI Cropping, Morphological Line Suppression & Comb Auto-Detection
 
 Structured forms frequently employ segmented character comb boxes with baseline tick marks or dividers (such as ID numbers, postal codes, and policy numbers). Downsampling full-page high-resolution scans often causes small comb boxes (<1.5% of total page area) to visually conflate baseline tick marks with handwritten pen strokes (for example, misinterpreting an open 'C' or 'o' touching a vertical tick mark as '4' or 'a').
 
 To resolve this without altering standard document processing pipelines:
 
-1. **High-Resolution Surgical Cropping (`crop_field_roi`)**:
-   - Rubric criteria define `field_type: "segmented_comb_box"` and normalized coordinates `bounding_box: [ymin, xmin, ymax, xmax]`.
-   - The region is cropped at full scan resolution with 3% contextual boundary padding to prevent edge clipping.
+1. **Architectural Division**:
+   - **Stage 1 (Primary Extractor)**: Operates with thinking tokens disabled (`thinking_budget: 0`) as a fast, high-throughput multimodal pass across the document or image.
+   - **Stage 2 (Judge Panel)**: Operates with thinking tokens enabled (`thinking_budget: 2048+`) **AND** Image Preprocessing (morphological tick suppression and ROI cropping) to perform rigorous adversarial forensic audits.
 
-2. **Dual-Engine Color Space Comb Suppression (`suppress_comb_lines`)**:
-   - Isolates near-neutral template gray/black ink (saturation `< 28`, value `> 45`) in HSV color space and selectively bleaches it to background white (`255`).
-   - Strictly preserves high-saturation pen ink (such as blue, purple, or colored ballpoint/gel ink) while enhancing contrast for dark black pen strokes.
-   - Automatically executes using OpenCV if available, with an identical fallback implementation using native Pillow and NumPy.
+2. **High-Resolution Surgical Cropping (`crop_field_roi`)**:
+   - Rubric criteria define `field_type: "segmented_comb_box"` and optional normalized coordinates `bounding_box: [ymin, xmin, ymax, xmax]`.
+   - The region is cropped at full scan resolution with 3% contextual boundary padding to eliminate downsampling artifacts.
 
-3. **Stage 1 Extractor Slot-by-Slot Transcription**:
-   - The extractor passes the cropped and bleached ROI directly to the multimodal model with explicit slot-by-slot transcription instructions.
+3. **Morphological Vertical Tick Suppression (`suppress_vertical_ticks`)**:
+   - Isolates and bleaches thin vertical tick marks and dividers ($\le 2\text{px}$) to background white (`255`) using morphological vertical structuring elements and vectorized run-length analysis, while strictly protecting curved character pen strokes ($\ge 3\text{px}$) for both black ballpoint/gel pen ink and colored ink.
 
-4. **Stage 2 Adversarial Forensic Comb Audit**:
-   - The parallel judge panel independently audits the candidate value against the cropped ROI payload, specifically testing for template tick mark conflation and overturning false positive glyphs with `failure_mode: "TEMPLATE_INK_CONFLATION"`.
+4. **Automated Comb Box Localization (`auto_detect_comb_rois`)**:
+   - Analyzes horizontal and vertical pixel projection profiles to automatically detect segmented comb box rows even when `bounding_box` is omitted from the rubric specification.
+
+5. **Stage 2 Adversarial Forensic Comb Audit**:
+   - The parallel judge panel executes a blind independent ink trace before inspecting candidate values, falsifies template-ink conflations (e.g., `'4'` -> `'C'`, `'a'` -> `'o'`), and overrules erroneous candidates with `failure_mode: "TEMPLATE_INK_CONFLATION"` and true ink corrections.
 
 ---
 
@@ -115,6 +117,7 @@ pdf-llm-as-judge-skill/
 ├── SKILL.md                                        # Main skill instruction file for AI agents
 ├── plugin.json                                     # Plugin registration manifest
 ├── README.md                                       # Project documentation
+├── prd.md                                          # Product Requirements Document
 ├── pyproject.toml                                  # Python package configuration
 ├── LICENSE                                         # Apache 2.0 license
 ├── assets/
@@ -190,13 +193,13 @@ All sample files provided in the `samples/` directory are completely synthetic a
    # Log in to ADC
    gcloud auth application-default login
    ```
-   - **Project Auto-Detection**: The client automatically detects your active project from `gcloud config get-value project`, your ADC metadata, or `GOOGLE_CLOUD_PROJECT`.
+   - **Project Auto-Detection**: The client automatically detects your active project from environment variables or active ADC configuration.
    - **Optional Environment Variables**:
      ```bash
-     export GOOGLE_CLOUD_PROJECT="your-project-id"   # Explicit project override
-     export GOOGLE_CLOUD_LOCATION="us-central1"          # Default region (us-central1)
+     export VERTEX_PROJECT="your-project-id"   # Explicit project override
+     export VERTEX_LOCATION="us-central1"      # Default region (us-central1)
      ```
-   - **Standalone Environments**: Since ADC credentials are stored globally at `~/.config/gcloud/application_default_credentials.json`, standalone agent harnesses and background scripts automatically detect your credentials.
+   - **Standalone Environments**: When ADC credentials exist in the user environment, standalone agent harnesses and scripts automatically detect your credentials.
 
    #### Option B: API Key Authentication
    To authenticate using an API key:
@@ -247,7 +250,7 @@ python3 scripts/evaluate_candidate.py \
 | `--dashboard` | String | `None` | File path to generate HTML UI Dashboard |
 | `--api-key` | String | `None` | Explicit API key (overrides `GEMINI_API_KEY`) |
 | `--extractor-model` | String | `gemini-3.8-flash` | Model for primary extraction |
-| `--judge-model` | String | `gemini-3.6-flash` | Model for judge panel |
+| `--judge-model` | String | `gemini-3.8-flash` | Model for judge panel |
 | `--thinking-budget` | Integer | `2048` | Reasoning budget token count for judges |
 | `--num-judges` | Integer | `5` | Number of concurrent judges in panel |
 | `--min-pass-ratio` | Float | `0.8` | Pass ratio threshold for auto-accept |
@@ -327,6 +330,19 @@ Suppose you have a photo or scan of a lab report (`samples/cancer_screening_lab_
 3. **Inspect the interactive image viewer**:
    In `ui/index.html`, the Document Inspector displays the image with zoom and pan controls alongside the extraction rules.
 
+#### Example C: Processing a Handwritten Form with Pre-Printed Comb Boxes
+
+Suppose you have a handwritten patient registration or intake card containing segmented character boxes with vertical dividers and baseline tick marks, where pen strokes touch the pre-printed box borders.
+
+1. **Send the request in your AI agent chat**:
+   ```text
+   /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
+   ```
+2. **Automated Line Suppression and Forensic Verification**:
+   The system automatically applies image filtering to remove printed box dividers and tick marks while protecting the pen ink strokes. Five independent judges independently trace the handwritten letters and numbers (verifying that characters such as an open 'C' or oval 'o' were not mistaken for '4' or 'a' due to touching tick marks).
+3. **Review Consensus & Corrections**:
+   If an initial reader misinterprets a letter because of an intersecting line, the judges overrule the error and supply the correct handwritten value in the validated output.
+
 ---
 
 ### Navigating the Interactive Dashboard
@@ -365,7 +381,7 @@ This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`
 4. **Customizing Models & Judge Parameters**:
    You can customize the models used for extraction and judging directly in your prompt or command:
    - **`--extractor-model`**: Stage 1 Primary Extraction model (default: `gemini-3.8-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
-   - **`--judge-model`**: Stage 2 Judge Panel model (default: `gemini-3.6-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
+   - **`--judge-model`**: Stage 2 Judge Panel model (default: `gemini-3.8-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
    - **`--thinking-budget`**: Number of reasoning tokens per judge (default: `2048`, alternatives: `1024`, `4096`, `8192`).
    - **`--num-judges`**: Number of concurrent judges in the panel (default: `5`, alternatives: `3`, `7`).
 
@@ -390,7 +406,7 @@ This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`
 
 #### 4. Custom Model Selection (Explicit Flash & Pro Pairing on Image)
 ```text
-/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-3.8-flash --judge-model gemini-3.6-flash --thinking-budget 2048
+/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-3.8-flash --judge-model gemini-3.8-flash --thinking-budget 2048
 ```
 
 #### 5. High-Reasoning Deep Evaluation (Higher Thinking Budget)
@@ -400,7 +416,7 @@ This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`
 
 #### 6. Natural Language Prompt for Image Input with Output Specification
 ```text
-Extract all clinical and demographic fields from the scan samples/cancer_screening_lab_report.jpg using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.6-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at ui/index.html.
+Extract all clinical and demographic fields from the scan samples/cancer_screening_lab_report.jpg using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.8-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at ui/index.html.
 ```
 
 #### 7. Evaluating Pre-Extracted Candidate JSON Against an Image Document

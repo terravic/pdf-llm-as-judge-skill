@@ -221,7 +221,7 @@ class ConsensusEngine:
             judge_model = judge_reports[0].model_name
         if thinking_budget is None and judge_reports:
             thinking_budget = judge_reports[0].thinking_budget
-        resolved_judge_model = judge_model or "gemini-3.6-flash"
+        resolved_judge_model = judge_model or "gemini-3.8-flash"
         resolved_thinking_budget = thinking_budget if thinking_budget is not None else 2048
         target_fields = [c.field_name for c in rubric.extraction_criteria]
         # Include any extra keys present in candidate extraction

@@ -29,7 +29,13 @@ from pdf_consensus_evaluator.models import (
 )
 from pdf_consensus_evaluator.stage1_extractor import Stage1Extractor
 from pdf_consensus_evaluator.stage2_judge_panel import Stage2JudgePanel
-from utils.comb_filter import crop_field_roi, prepare_crop_payload, suppress_comb_lines
+from utils.comb_filter import (
+    auto_detect_comb_rois,
+    crop_field_roi,
+    prepare_crop_payload,
+    suppress_comb_lines,
+    suppress_vertical_ticks,
+)
 
 
 def test_crop_field_roi_coordinates_and_padding():
@@ -153,8 +159,8 @@ def test_stage2_comb_crop_judge_prompt_construction():
     )
     
     assert "Adversarial Forensic Judge" in sys_prompt
-    assert "Grid Alignment Audit" in sys_prompt
-    assert "Optical Conflation Test" in sys_prompt
+    assert "Grid Alignment & Tick Mark Mapping" in sys_prompt
+    assert "Conflation Falsification Check" in sys_prompt
     assert "Adversarial Overrule" in sys_prompt
     assert "audit_verdict" in sys_prompt
     assert "OVERTURNED" in sys_prompt
@@ -301,3 +307,165 @@ def test_stage1_extractor_comb_intercept():
     finally:
         if os.path.exists(tmp_path):
             os.remove(tmp_path)
+
+
+def test_suppress_vertical_ticks_black_ink():
+    """Verifies that suppress_vertical_ticks bleaches thin vertical ticks on black ink while preserving curved strokes."""
+    arr = np.full((100, 100, 3), 255, dtype=np.uint8)
+    # Draw curved black ink stroke ('C' arc)
+    for angle in np.linspace(-np.pi * 0.7, np.pi * 0.7, 50):
+        y = int(50 + 20 * np.sin(angle))
+        x = int(50 + 20 * np.cos(angle))
+        arr[max(0, y - 1):min(100, y + 2), max(0, x - 1):min(100, x + 2)] = [30, 30, 30]
+
+    # Draw thin vertical tick mark intersecting the bottom curve (width 2, height 20)
+    arr[65:85, 55:57] = [40, 40, 40]
+
+    cleaned = suppress_vertical_ticks(arr, min_tick_height=7, max_tick_width=2)
+
+    # Tick mark area below the curve should be bleached to 255
+    assert np.all(cleaned[75:85, 55:57] == 255), "Vertical tick mark must be bleached"
+    # Back of the 'C' curve should remain dark ink
+    assert np.any(cleaned[45:55, 65:75] < 100), "Curved ink stroke must be preserved"
+
+
+def test_auto_detect_comb_rois_on_synthetic_form():
+    """Verifies that auto_detect_comb_rois detects candidate comb box rows."""
+    img = np.full((600, 800, 3), 255, dtype=np.uint8)
+    # Draw baseline
+    img[200:202, 250:550] = [50, 50, 50]
+    # Draw periodic comb tick marks
+    for x in range(250, 551, 50):
+        img[180:200, x:x + 2] = [50, 50, 50]
+
+    rois = auto_detect_comb_rois(img, min_width_ratio=0.08)
+    assert len(rois) >= 1, "Should detect at least one comb ROI"
+    ymin, xmin, ymax, xmax = rois[0]
+    assert 0.25 <= ymin <= 0.35, f"ymin {ymin} should be near 0.30"
+    assert 0.28 <= xmin <= 0.35, f"xmin {xmin} should be near 0.31"
+    assert 0.65 <= xmax <= 0.75, f"xmax {xmax} should be near 0.69"
+
+
+def test_stage2_judge_auto_detect_comb_roi_fallback():
+    """Verifies that Stage 2 falls back to auto_detect_comb_rois when bounding_box is None."""
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp_path = tmp.name
+        # Create image with comb box
+        img = np.full((600, 800, 3), 255, dtype=np.uint8)
+        img[200:202, 250:550] = [50, 50, 50]
+        for x in range(250, 551, 50):
+            img[180:200, x:x + 2] = [50, 50, 50]
+        Image.fromarray(img).save(tmp_path, format="PNG")
+
+    try:
+        # Rubric has segmented_comb_box but NO bounding_box
+        rubric = RubricSpec(
+            rubric_version="1.0",
+            document_type="Form",
+            extraction_criteria=[
+                FieldExtractionCriteria(
+                    field_name="comb_id",
+                    field_type="segmented_comb_box",
+                    bounding_box=None,
+                    syntactic_rules=SyntacticRule(required=True, type="string"),
+                    semantic_grounding_rules=SemanticGroundingRule(
+                        source_section="ID",
+                        verification_criteria="ID",
+                        failure_modes=["TEMPLATE_INK_CONFLATION"],
+                    ),
+                )
+            ],
+        )
+        candidate = {"comb_id": "0397H4"}
+        mock_client = MagicMock()
+        main_resp = {
+            "evaluations": [
+                {
+                    "field_name": "comb_id",
+                    "syntactic_check": "PASS",
+                    "grounding_check": "PASS",
+                    "verdict": "PASS",
+                    "failure_mode": "NONE",
+                    "justification": "Candidate value",
+                    "proposed_correction": None,
+                }
+            ]
+        }
+        audit_resp = {
+            "audit_verdict": "OVERTURNED",
+            "conflated_slots": [
+                {
+                    "slot_index": 5,
+                    "candidate_char": "4",
+                    "falsification_reason": "Letter C touches baseline tick",
+                    "corrected_char": "C",
+                }
+            ],
+            "final_verified_text": "0397HC",
+            "confidence_score": 0.99,
+            "forensic_notes": "Overturned 4 to C",
+        }
+        mock_client.generate_content_async = AsyncMock(side_effect=[main_resp, audit_resp])
+
+        panel = Stage2JudgePanel(client=mock_client)
+        report = asyncio.run(panel.evaluate_single_judge(
+            judge_idx=0,
+            document_path=tmp_path,
+            rubric=rubric,
+            candidate_extraction=candidate,
+        ))
+
+        assert len(report.evaluations) == 1
+        ev = report.evaluations[0]
+        assert ev.verdict == CheckResult.FAIL
+        assert ev.failure_mode == "TEMPLATE_INK_CONFLATION"
+        assert ev.proposed_correction == "0397HC"
+        # Verify two calls were made (main eval + comb crop audit)
+        assert mock_client.generate_content_async.call_count == 2
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_stage1_extractor_maintains_zero_thinking():
+    """Verifies that Stage 1 primary extractor strictly uses thinking_budget=0."""
+    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
+        tmp_path = tmp.name
+        img = Image.new("RGB", (100, 100), color=(255, 255, 255))
+        img.save(tmp_path, format="PNG")
+
+    try:
+        rubric = RubricSpec(
+            rubric_version="1.0",
+            document_type="Form",
+            extraction_criteria=[
+                FieldExtractionCriteria(
+                    field_name="name",
+                    syntactic_rules=SyntacticRule(required=True, type="string"),
+                    semantic_grounding_rules=SemanticGroundingRule(
+                        source_section="SEC1",
+                        verification_criteria="Name",
+                    ),
+                )
+            ],
+        )
+        mock_client = MagicMock()
+        mock_client.generate_content.return_value = {"name": "Test User"}
+
+        extractor = Stage1Extractor(client=mock_client)
+        extractor.extract(document_path=tmp_path, rubric=rubric)
+
+        assert mock_client.generate_content.call_count == 1
+        call_kwargs = mock_client.generate_content.call_args.kwargs
+        assert call_kwargs.get("thinking_budget") == 0, "Stage 1 must strictly have thinking_budget=0"
+    finally:
+        if os.path.exists(tmp_path):
+            os.remove(tmp_path)
+
+
+def test_stage2_judge_model_and_thinking_configuration():
+    """Verifies that Stage 2 judge panel defaults to gemini-3.8-flash and uses thinking_budget=2048."""
+    panel = Stage2JudgePanel()
+    assert panel.model == "gemini-3.8-flash"
+    assert panel.thinking_budget >= 2048
+

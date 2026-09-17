@@ -24,7 +24,7 @@ logger = logging.getLogger("pdf_consensus_evaluator.stage2")
 class Stage2JudgePanel:
     """Orchestrates parallel LLM judges with reasoning/thinking enabled."""
 
-    DEFAULT_MODEL = "gemini-3.6-flash"
+    DEFAULT_MODEL = "gemini-3.8-flash"
     DEFAULT_THINKING_BUDGET = 2048
     DEFAULT_NUM_JUDGES = 5
     DEFAULT_JUDGE_TIMEOUT = 90.0
@@ -60,16 +60,17 @@ class Stage2JudgePanel:
         system_instruction = (
             f"You are an Adversarial Forensic Judge auditing a segmented comb field transcription.\n"
             f"Target Field: {field_name}\n"
-            f"Candidate Value: {candidate_text}\n\n"
-            f"AUDIT PROTOCOL:\n"
-            f"1. Grid Alignment Audit: Scan each character slot. Where does each character's vertical/horizontal stem align relative to the bottom tick marks or cell boundaries?\n"
-            f"2. Optical Conflation Test:\n"
-            f"   - Does a character appear to be '4' solely because a handwritten 'C' or 'L' touches a comb tick?\n"
-            f"   - Does a character appear to be 'a', 'd', or 'q' solely because an 'o' touches a comb tick or vertical divider?\n"
-            f"   - Does a character appear to be 'H' solely because two strokes or an 'I' touches a comb line?\n"
-            f"   - Does a character appear to be '8' or 'B' because an open loop touches a boundary?\n"
-            f"3. Stroke Geometry & Continuity: Trace pen curvature and ink pressure. Disregard all tick marks and cell dividers bleached or faint in the background.\n"
-            f"4. Adversarial Overrule: If the candidate value incorporated comb lines into character identity, OVERRULE the candidate.\n\n"
+            f"Candidate Value to Audit: {candidate_text}\n\n"
+            f"AUDIT PROTOCOL (EXECUTE STEP-BY-STEP IN YOUR THINKING PROCESS):\n"
+            f"1. Blind Independent Tracing: First, look ONLY at the cropped image and mentally trace the pen strokes independently from left to right. Do NOT anchor to or assume the candidate value '{candidate_text}' is correct.\n"
+            f"2. Grid Alignment & Tick Mark Mapping: Identify where repeating pre-printed baseline ticks and vertical dividers are located along the cell boundaries.\n"
+            f"3. Conflation Falsification Check: Compare your independent ink tracing against candidate '{candidate_text}'. Specifically test whether any candidate character relies on an intersecting baseline tick or vertical divider to justify its identity:\n"
+            f"   - Is a candidate '4' actually an open counter-clockwise curved 'C' (or 'c') that merely touched a baseline tick mark?\n"
+            f"   - Is a candidate 'a', 'd', or 'q' actually an isolated oval loop 'o' (or '0') that intersected a vertical divider or tick?\n"
+            f"   - Is a candidate 'H' actually two strokes, or an 'I'/'1' touching a cell wall?\n"
+            f"   - Is a candidate '8' or 'B' an open loop (such as '3' or 'C') touching a cell border?\n"
+            f"4. Adversarial Overrule: If the candidate value incorporated any pre-printed template mark into character identity, you MUST set audit_verdict to 'OVERTURNED', describe the falsification in conflated_slots and forensic_notes, and output the true ink-only transcription in final_verified_text.\n"
+            f"5. Confirmation: If and only if the candidate value factually matches the true pen ink strokes without conflating template marks, set audit_verdict to 'CONFIRMED'.\n\n"
             f"Output valid JSON conforming to this schema:\n"
             f"{{\n"
             f'  "audit_verdict": "CONFIRMED" | "OVERTURNED",\n'
@@ -212,10 +213,20 @@ class Stage2JudgePanel:
                 comb_fields = [
                     c for c in rubric.extraction_criteria
                     if (c.field_type == "segmented_comb_box" or getattr(c.syntactic_rules, "field_type", None) == "segmented_comb_box")
-                    and (c.bounding_box or getattr(c.syntactic_rules, "bounding_box", None))
                 ]
+                auto_rois = None
                 for cf in comb_fields:
                     bbox = cf.bounding_box or getattr(cf.syntactic_rules, "bounding_box", None)
+                    if not bbox:
+                        if auto_rois is None:
+                            try:
+                                from utils.comb_filter import auto_detect_comb_rois
+                                auto_rois = auto_detect_comb_rois(target_path)
+                            except Exception:
+                                auto_rois = []
+                        if auto_rois:
+                            bbox = auto_rois[0]
+
                     cand_val = candidate_extraction.get(cf.field_name)
                     if bbox and cand_val is not None:
                         try:

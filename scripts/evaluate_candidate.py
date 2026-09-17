@@ -52,8 +52,8 @@ def parse_args():
     parser.add_argument(
         "--judge-model",
         type=str,
-        default="gemini-3.6-flash",
-        help="Judge model (default: gemini-3.6-flash)",
+        default="gemini-3.8-flash",
+        help="Judge model (default: gemini-3.8-flash)",
     )
     parser.add_argument(
         "--thinking-budget",

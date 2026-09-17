@@ -21,7 +21,7 @@ The skill coordinates a three-stage pipeline:
    - Generates an initial candidate JSON object adhering to the target field schema.
 
 2. **Stage 2: Parallel 5x Thinking Judge Panel**
-   - Spawns 5 concurrent, isolated instances of `gemini-3.6-flash` with thinking budget enabled (`thinking_budget: 2048+`).
+   - Spawns 5 concurrent, isolated instances of `gemini-3.8-flash` with thinking budget enabled (`thinking_budget: 2048+`).
    - Each judge independently cross-references the candidate extraction against both the raw visual document/image and the verification rubric (syntactic rules and semantic grounding criteria).
    - Judges execute an **Adversarial Forensic Protocol** within their thinking process to falsify potential template-ink conflation errors (e.g. baseline comb ticks or vertical dividers misread as character stems). Judges inspect visual features, overturn conflated characters, and return verdicts, failure modes (including `TEMPLATE_INK_CONFLATION`), visual citations, and proposed corrections.
 
@@ -54,18 +54,21 @@ Judges must utilize their 2048+ token thinking budget to execute this 4-step adv
    - Is an alleged `'B'` or `'8'` an open loop (such as `'3'` or `'C'`) touching a cell boundary?
 4. **Verdict Determination & True Ink Overturn**: If any character in the candidate extraction relies on a pre-printed form mark to justify its classification, the judge MUST fail the grounding check (`FAIL`), fail the verdict (`FAIL`), assign `failure_mode: "TEMPLATE_INK_CONFLATION"`, detail the falsification in `justification`, and output the true ink-only value in `proposed_correction`.
 
-#### 3. Surgical ROI Cropping & Comb-Line Suppression Pipeline (Pre-printed Forms)
+#### 3. Surgical ROI Cropping, Morphological Line Suppression & Comb Auto-Detection (Pre-printed Forms)
 When processing pre-printed forms containing segmented character comb boxes with baseline tick marks or dividers (e.g., ID numbers, postal codes, account numbers):
+- **Architectural Division**:
+  - **Stage 1 (Primary Extractor)**: Operates with thinking tokens disabled (`thinking_budget: 0`) as a fast, high-throughput multimodal sweep across the document or image.
+  - **Stage 2 (Judge Panel)**: Operates with thinking tokens enabled (`thinking_budget: 2048+`) **AND** Image Preprocessing to conduct deep adversarial forensic audits.
 - **Problem**: Full-page downsampling causes small comb boxes (<1.5% of total page area) to blend baseline tick marks with handwritten pen strokes, leading to false optical conflation (e.g., 'C' touching a tick misclassified as '4', or 'o' touching a tick misclassified as 'a').
 - **Dual-Engine Filtering (`utils/comb_filter.py`)**:
   - `crop_field_roi`: Surgically crops the field region based on normalized coordinates `[ymin, xmin, ymax, xmax]` with a 3% contextual padding, preserving original native scan resolution without downsampling artifacts.
-  - `suppress_comb_lines`: Applies color space thresholding to isolate near-neutral template gray/black marks (saturation `< 28`, value `> 45`) and selectively bleaches them to background white (`255`), while strictly protecting saturated colored pen ink (such as blue or colored ballpoint/gel pens) and enhancing pen stroke contrast. The implementation automatically uses OpenCV when available, with an identical fallback using native Pillow and NumPy.
+  - `suppress_vertical_ticks`: Isolates and bleaches thin vertical tick marks and dividers ($\le 2\text{px}$) to background white (`255`) using morphological structuring elements and vectorized run-length analysis, while preserving curved character pen strokes ($\ge 3\text{px}$) for both black ballpoint/gel pen ink and colored ink.
+  - `suppress_comb_lines`: Combines HSV color space thresholding for colored ink with morphological line suppression for black ballpoint/gel pen ink.
+  - `auto_detect_comb_rois`: Employs horizontal and vertical projection profiles to automatically detect segmented comb box rows even when `bounding_box` is omitted from the rubric specification.
 - **Rubric Specification Support**:
-  - Rubrics configure comb fields with `field_type: "segmented_comb_box"` and `bounding_box: [ymin, xmin, ymax, xmax]`.
-- **Slot-by-Slot Transcription Prompting (Stage 1 Extractor)**:
-  - Dispatches isolated high-resolution crop payloads to the multimodal extractor with a slot-by-slot alignment schema.
+  - Rubrics configure comb fields with `field_type: "segmented_comb_box"` and optional `bounding_box: [ymin, xmin, ymax, xmax]`.
 - **Forensic Comb Audit & Overrule (Stage 2 Judge Panel)**:
-  - Judges audit candidate extractions against the high-resolution crop, falsify template-ink conflations (e.g., `'4'` -> `'C'`, `'a'` -> `'o'`), and overrule candidate values with `failure_mode: "TEMPLATE_INK_CONFLATION"` and true ink corrections.
+  - Judges audit candidate extractions against the high-resolution, morphologically cleaned crop, falsify template-ink conflations (e.g., `'4'` -> `'C'`, `'a'` -> `'o'`), and overrule candidate values with `failure_mode: "TEMPLATE_INK_CONFLATION"` and true ink corrections.
 
 #### 4. Preservation of Other Document Types
 This adversarial protocol, surgical comb cropping, and template subtraction specifically target handwritten entries on structured forms and comb layouts. It does not modify or degrade the skill's ability to process other document types (such as standard typed PDFs, digital vector documents, molecular lab reports, or image scans without handwriting), which continue to be extracted and verified with standard high precision.
@@ -112,7 +115,7 @@ python3 scripts/run_pipeline.py \
   --output <PATH_TO_OUTPUT_JSON> \
   --dashboard <PATH_TO_DASHBOARD_HTML> \
   --extractor-model gemini-3.8-flash \
-  --judge-model gemini-3.6-flash
+  --judge-model gemini-3.8-flash
 ```
 
 Example using the sample files:

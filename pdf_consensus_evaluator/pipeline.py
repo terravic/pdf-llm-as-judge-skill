@@ -24,7 +24,7 @@ class ExtractionConsensusPipeline:
         self,
         api_key: Optional[str] = None,
         extractor_model: str = "gemini-3.8-flash",
-        judge_model: str = "gemini-3.6-flash",
+        judge_model: str = "gemini-3.8-flash",
         thinking_budget: int = 2048,
         num_judges: int = 5,
         judge_timeout: float = 90.0,
