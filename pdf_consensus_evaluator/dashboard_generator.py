@@ -1701,6 +1701,11 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       color: var(--text-primary);
       white-space: nowrap;
       overflow-x: auto;
+      scrollbar-width: none;
+    }
+
+    .cmd-preview-code::-webkit-scrollbar {
+      display: none;
     }
 
     .cmd-btn-group {
