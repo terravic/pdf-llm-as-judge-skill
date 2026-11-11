@@ -54,7 +54,7 @@ class Stage1Extractor:
             f"Your task is to inspect the attached document (PDF or image) and extract the specified target fields into a valid JSON object.\n\n"
             f"Target Fields:\n{schema_text}\n\n"
             f"Extraction Rules & Multimodal Form Guidelines:\n"
-            f"1. Form Structures, Handwritten Text & Template Subtraction: Accurately read printed text, fill-in-the-blank entries, handwritten cursive/print, numbers, and notes within structured or semi-structured form layouts. On forms with segmented character boxes, comb tick marks, or baseline dividers, mentally subtract rigid pre-printed template elements—do not conflate a vertical comb divider or baseline tick mark with a character stroke (e.g., do not misread an 'o' touching a baseline tick as an 'a', or a 'C'/'L' touching a vertical comb tick as a '4'). Examine pen ink color, stroke tone, and curvature to isolate true handwritten characters and numbers from touching or overlapping printed form lines. For standard digital PDFs or documents without handwriting, perform standard high-precision extraction without altering normal processing.\n"
+            f"1. Form Structures, Handwritten Text & Template Subtraction: Accurately read printed text, fill-in-the-blank entries, handwritten cursive/print, numbers, and notes within structured or semi-structured form layouts. On forms with segmented character boxes, comb tick marks, or baseline dividers, mentally subtract rigid pre-printed template elements; do not conflate a vertical comb divider or baseline tick mark with a character stroke (e.g., do not misread an 'o' touching a baseline tick as an 'a', or a 'C'/'L' touching a vertical comb tick as a '4'). Examine pen ink color, stroke tone, and curvature to isolate true handwritten characters and numbers from touching or overlapping printed form lines. For standard digital PDFs or documents without handwriting, perform standard high-precision extraction without altering normal processing.\n"
             f"2. Checkboxes & Selection Controls: Accurately identify checkmarks, crossed boxes, filled circles/radio buttons, and distinct checked vs unchecked states.\n"
             f"3. Strikethroughs & Corrections: If handwritten text has been crossed out or corrected with an updated value nearby, extract the final intended correction.\n"
             f"4. Ambiguity Resolution: Use visual context and schema rules (e.g., date formats, numeric ranges) to disambiguate unclear handwriting without hallucinating.\n"
@@ -131,7 +131,7 @@ class Stage1Extractor:
             response_json=True,
         )
 
-        # Surgical Intercept: Check for segmented_comb_box fields on image inputs
+        # Targeted ROI Intercept: Check for segmented_comb_box fields on image inputs
         if self._is_image_file(target_path):
             comb_fields = [
                 c for c in rubric.extraction_criteria
@@ -208,7 +208,7 @@ class Stage1Extractor:
             response_json=True,
         )
 
-        # Surgical Intercept: Check for segmented_comb_box fields on image inputs
+        # Targeted ROI Intercept: Check for segmented_comb_box fields on image inputs
         if self._is_image_file(target_path):
             comb_fields = [
                 c for c in rubric.extraction_criteria

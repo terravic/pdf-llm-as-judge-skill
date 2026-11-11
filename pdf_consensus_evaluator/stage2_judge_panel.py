@@ -208,7 +208,7 @@ class Stage2JudgePanel:
                 JudgeEvaluation.from_dict(item) for item in eval_list_raw
             ]
 
-            # Surgical Intercept: Audit segmented_comb_box fields on image inputs
+            # Targeted ROI Intercept: Audit segmented_comb_box fields on image inputs
             if self._is_image_file(target_path):
                 comb_fields = [
                     c for c in rubric.extraction_criteria

@@ -3,7 +3,7 @@
 Adheres strictly to DESIGN.md:
 - Typography: Instrument Serif (display), DM Sans (UI), IBM Plex Mono (tabular-nums).
 - Flat single-level bento surfaces with 1px solid borders (6px-8px radius), zero gradients.
-- Three-icon segmented theme selector (Light / Dark / System) with cross-platform OS fallback.
+- Segmented theme selector (Light / Dark / System) with cross-platform OS fallback.
 - Exact Light (#FAFAF9 / #FFFFFF / #E7E5E4 / #1C1917 / #787774) and Dark
   (#0D0E11 / #16171D / #292A30 / #ECE8E2 / #9A9895) color schemes.
 - Semantic data visualization palette (#0D9488, #D97706, #4F46E5, #059669, #E11D48) across
@@ -35,29 +35,13 @@ DEFAULT_FALLBACK_MODELS = [
 
 
 def _detect_host_system_theme() -> str:
-    """Queries the native host OS appearance preference as a fallback for headless webviews."""
+    """Queries the host environment appearance preference as a fallback for headless webviews."""
     try:
-        if sys.platform == "darwin":
-            res = subprocess.run(
-                ["defaults", "read", "-g", "AppleInterfaceStyle"],
-                capture_output=True,
-                text=True,
-                timeout=1.5,
-                check=False,
-            )
-            if res.returncode == 0 and "dark" in res.stdout.strip().lower():
-                return "dark"
-            return "light"
+        explicit_env = os.environ.get("SYSTEM_THEME", "").strip().lower()
+        if explicit_env in ("dark", "light"):
+            return explicit_env
 
-        if sys.platform == "win32":
-            import winreg  # type: ignore
-
-            key_path = r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize"
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER, key_path) as key:
-                val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
-                return "dark" if int(val) == 0 else "light"
-
-        # Linux: inspect GTK_THEME, gsettings, and kdeglobals
+        # Inspect desktop theme environment variables and freedesktop settings
         gtk_theme = os.environ.get("GTK_THEME", "").lower()
         if "dark" in gtk_theme:
             return "dark"
@@ -317,7 +301,7 @@ def _render_extracted_fields_rows_html(report: Dict[str, Any]) -> str:
         c = consensus.get(field_name) or {}
         st = str(c.get("status", "CANDIDATE"))
         ratio = str(c.get("agreement_ratio", "")).split(" ")[0]
-        pill_txt = f"{st} · {ratio}" if ratio else st
+        pill_txt = f"{st} | {ratio}" if ratio else st
         cls = _status_token_class(st)
 
         rows.append(
@@ -348,7 +332,7 @@ def _render_rubric_rows_html(rubric: Dict[str, Any], report: Dict[str, Any]) -> 
             rows.append(
                 f"<tr>"
                 f'<td class="mono-key">{fn_esc}</td>'
-                f'<td class="mono-cell">string · req</td>'
+                f'<td class="mono-cell">string | req</td>'
                 f"<td>Document Source</td>"
                 f'<td class="muted-cell">Derived from candidate extraction schema.</td>'
                 f"</tr>"
@@ -363,7 +347,7 @@ def _render_rubric_rows_html(rubric: Dict[str, Any], report: Dict[str, Any]) -> 
 
         dtype = html.escape(str(syn.get("type", "string")))
         req = "req" if syn.get("required", True) else "opt"
-        constraints: List[str] = [f"{dtype} · {req}"]
+        constraints: List[str] = [f"{dtype} | {req}"]
         if syn.get("format_regex"):
             constraints.append(f"/{html.escape(str(syn['format_regex']))}/")
         if syn.get("expected_subfields"):
@@ -375,7 +359,7 @@ def _render_rubric_rows_html(rubric: Dict[str, Any], report: Dict[str, Any]) -> 
             bbox_str = ", ".join(str(v) for v in c["bounding_box"])
             constraints.append(f"roi:[{html.escape(bbox_str)}]")
 
-        source_sec = html.escape(str(sem.get("source_section") or "—"))
+        source_sec = html.escape(str(sem.get("source_section") or "--"))
         verif = html.escape(str(sem.get("verification_criteria") or ""))
         fms = sem.get("failure_modes") or []
         fm_html = ""
@@ -449,8 +433,8 @@ def _render_judge_matrix_table_html(report: Dict[str, Any], requested_judges: in
                     primary_note = f"[{jid}] {just}"
             elif jr and jr.get("error"):
                 verdict = "ERR"
-                syn = "—"
-                gnd = "—"
+                syn = "--"
+                gnd = "--"
                 fm = "QUORUM_ERR"
                 if not primary_note:
                     primary_note = str(jr.get("error", ""))
@@ -562,7 +546,7 @@ def _render_exceptions_ledger_html(report: Dict[str, Any]) -> str:
             f'<div class="ledger-row">'
             f'<div class="ledger-row-top">'
             f'<span class="mono-key">{fn}</span>'
-            f'<span class="status-pill {cls}">{html.escape(status)} · {ratio}</span>'
+            f'<span class="status-pill {cls}">{html.escape(status)} | {ratio}</span>'
             f"</div>"
             f'<div class="ledger-meta"><span>Candidate:</span> <code>{cand_val}</code></div>'
             f'<div class="ledger-meta"><span>Failure Modes:</span> {fm_str}</div>'
@@ -593,7 +577,7 @@ def _render_audit_rows_html(report: Dict[str, Any]) -> str:
         fms = item.get("failure_modes") or []
         fm_tags = (
             " ".join(f'<span class="fm-token">{html.escape(str(m))}</span>' for m in fms)
-            or "—"
+            or "--"
         )
         dissent = item.get("dissent_reasons") or []
         dissent_text = (
@@ -708,7 +692,7 @@ def _build_html_template(
 
     template = _HTML_SHELL
     replacements = {
-        "__DOC_TITLE__": f"{document_type} — {brand_title_text}",
+        "__DOC_TITLE__": f"{document_type} -- {brand_title_text}",
         "__INITIAL_THEME__": html.escape(system_theme),
         "__BRAND_TITLE__": brand_title_text,
         "__DOC_TYPE__": document_type,
@@ -768,7 +752,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
   <style>
     :root,
     [data-theme="light"] {
-      --bg-canvas: #FAFAF9;
+      --bg-page: #FAFAF9;
       --bg-surface: #FFFFFF;
       --bg-subtle: #F4F3F1;
       --border-color: #E7E5E4;
@@ -790,7 +774,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       --tint-rose: rgba(225, 29, 72, 0.10);
 
       --font-serif: "Instrument Serif", Georgia, "Times New Roman", serif;
-      --font-sans: "DM Sans", -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+      --font-sans: "DM Sans", system-ui, "Helvetica Neue", Arial, sans-serif;
       --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
       --radius-pane: 8px;
@@ -798,7 +782,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
     }
 
     [data-theme="dark"] {
-      --bg-canvas: #0D0E11;
+      --bg-page: #0D0E11;
       --bg-surface: #16171D;
       --bg-subtle: #1E2028;
       --border-color: #292A30;
@@ -820,7 +804,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
     }
 
     html, body {
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       color: var(--text-primary);
       font-family: var(--font-sans);
       font-size: 14px;
@@ -889,18 +873,18 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       flex-wrap: wrap;
     }
 
-    /* Segmented 3-Icon Theme Selector (DESIGN.md Section 3) */
+    /* Segmented Theme Selector (DESIGN.md Section 3) */
     .theme-segmented {
       display: inline-flex;
       align-items: center;
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-ctrl);
       padding: 2px;
       gap: 2px;
     }
 
-    .theme-icon-btn {
+    .theme-mode-btn {
       display: inline-flex;
       align-items: center;
       justify-content: center;
@@ -914,17 +898,17 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       transition: background-color 0.12s ease, color 0.12s ease, border-color 0.12s ease;
     }
 
-    .theme-icon-btn:hover {
+    .theme-mode-btn:hover {
       color: var(--text-primary);
     }
 
-    .theme-icon-btn.active {
+    .theme-mode-btn.active {
       background-color: var(--bg-surface);
       color: var(--text-primary);
       border-color: var(--border-color);
     }
 
-    .theme-icon-btn svg {
+    .theme-mode-btn svg {
       width: 14px;
       height: 14px;
       stroke: currentColor;
@@ -969,20 +953,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       background-color: var(--text-primary);
     }
 
-    .ctrl-btn-icon {
-      width: 28px;
-      padding: 0;
-    }
 
-    .ctrl-btn-icon svg {
-      width: 14px;
-      height: 14px;
-      stroke: currentColor;
-      stroke-width: 1.8;
-      fill: none;
-      stroke-linecap: round;
-      stroke-linejoin: round;
-    }
 
     /* Workspace Container */
     .workspace {
@@ -1247,7 +1218,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       font-family: var(--font-sans);
       font-size: 0.78rem;
       color: var(--text-primary);
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-ctrl);
       width: 190px;
@@ -1260,7 +1231,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
 
     /* Document Viewer Surface */
     .doc-viewport {
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       min-height: 560px;
       max-height: 700px;
       overflow: auto;
@@ -1280,7 +1251,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       width: 100%;
     }
 
-    #pdf-canvas {
+    #pdf-render-frame {
       display: block;
       max-width: 100%;
       height: auto;
@@ -1469,7 +1440,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       border-radius: 4px;
       border: 1px solid var(--border-color);
       color: var(--text-secondary);
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
     }
 
     .judge-verdict-cell {
@@ -1489,7 +1460,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       font-size: 0.76rem;
       line-height: 1.55;
       padding: 1rem 1.1rem;
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       color: var(--text-primary);
       overflow: auto;
       max-height: 430px;
@@ -1648,7 +1619,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       font-family: var(--font-mono);
       font-size: 0.76rem;
       color: var(--text-primary);
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-ctrl);
     }
@@ -1661,7 +1632,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
       font-variant-numeric: tabular-nums;
       font-size: 0.76rem;
       color: var(--text-primary);
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-ctrl);
     }
@@ -1693,7 +1664,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
     .cmd-preview-code {
       display: block;
       padding: 0.36rem 0.65rem;
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       border: 1px solid var(--border-color);
       border-radius: var(--radius-ctrl);
       font-family: var(--font-mono);
@@ -1749,7 +1720,7 @@ _HTML_SHELL = r"""<!DOCTYPE html>
     .inspector-strip {
       padding: 0.7rem 1.1rem;
       border-bottom: 1px solid var(--border-color);
-      background-color: var(--bg-canvas);
+      background-color: var(--bg-page);
       font-size: 0.78rem;
       display: flex;
       align-items: baseline;
@@ -1771,8 +1742,8 @@ _HTML_SHELL = r"""<!DOCTYPE html>
     <div class="brand-block">
       <h1 id="brand-heading">__BRAND_TITLE__</h1>
       <div class="brand-caption">
-        <span id="brand-doc-subtitle">__DOC_TYPE__ · Rubric v__RUBRIC_VERSION__</span>
-        <span>·</span>
+        <span id="brand-doc-subtitle">__DOC_TYPE__ | Rubric v__RUBRIC_VERSION__</span>
+        <span>|</span>
         <span class="live-indicator" id="live-status-indicator" data-live="local">Offline / Local Bundle Ready</span>
       </div>
     </div>
@@ -1786,9 +1757,9 @@ _HTML_SHELL = r"""<!DOCTYPE html>
         Export JSON
       </button>
 
-      <!-- Three-Icon Theme Selector (DESIGN.md Section 3) -->
+      <!-- Segmented Theme Selector (DESIGN.md Section 3) -->
       <div class="theme-segmented" id="theme-toggle" role="group" aria-label="Theme Mode Selector">
-        <button type="button" class="theme-icon-btn" id="theme-btn-light" title="Light Theme" aria-label="Light Theme" data-theme-mode="light" aria-pressed="false">
+        <button type="button" class="theme-mode-btn" id="theme-btn-light" title="Light Theme" aria-label="Light Theme" data-theme-mode="light" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <circle cx="12" cy="12" r="4.5"></circle>
             <line x1="12" y1="2" x2="12" y2="4.5"></line>
@@ -1801,12 +1772,12 @@ _HTML_SHELL = r"""<!DOCTYPE html>
             <line x1="17.3" y1="6.7" x2="19.07" y2="4.93"></line>
           </svg>
         </button>
-        <button type="button" class="theme-icon-btn" id="theme-btn-dark" title="Dark Theme" aria-label="Dark Theme" data-theme-mode="dark" aria-pressed="false">
+        <button type="button" class="theme-mode-btn" id="theme-btn-dark" title="Dark Theme" aria-label="Dark Theme" data-theme-mode="dark" aria-pressed="false">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5a8.5 8.5 0 1 0 11 11z"></path>
           </svg>
         </button>
-        <button type="button" class="theme-icon-btn active" id="theme-btn-system" title="System Theme" aria-label="System Theme" data-theme-mode="system" aria-pressed="true">
+        <button type="button" class="theme-mode-btn active" id="theme-btn-system" title="System Theme" aria-label="System Theme" data-theme-mode="system" aria-pressed="true">
           <svg viewBox="0 0 24 24" aria-hidden="true">
             <rect x="2.5" y="3.5" width="19" height="13" rx="1.8"></rect>
             <line x1="8.5" y1="20.5" x2="15.5" y2="20.5"></line>
@@ -1900,7 +1871,7 @@ __DATALIST_OPTIONS_HTML__
 
       <div class="model-cmd-group">
         <div class="cmd-preview-wrap">
-          <span class="model-input-label" id="available-models-caption">Run Command Preview (__MODEL_COUNT__ models suggested · any custom model ID supported)</span>
+          <span class="model-input-label" id="available-models-caption">Run Command Preview (__MODEL_COUNT__ models suggested | any custom model ID supported)</span>
           <code class="cmd-preview-code" id="model-cmd-preview">/pdf-llm-as-judge ...</code>
         </div>
         <div class="cmd-btn-group">
@@ -1934,27 +1905,19 @@ __DATALIST_OPTIONS_HTML__
             </div>
             <div class="pane-actions">
               <span id="pdf-page-controls" style="__PDF_CONTROLS_STYLE__ gap: 0.35rem; align-items: center;">
-                <button type="button" class="ctrl-btn ctrl-btn-icon" id="prev-page" title="Previous Page" aria-label="Previous Page">
-                  <svg viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"></polyline></svg>
-                </button>
+                <button type="button" class="ctrl-btn" id="prev-page" title="Previous Page" aria-label="Previous Page">Prev</button>
                 <span class="mono-cell" id="page-num-display">Page 1</span>
-                <button type="button" class="ctrl-btn ctrl-btn-icon" id="next-page" title="Next Page" aria-label="Next Page">
-                  <svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>
-                </button>
+                <button type="button" class="ctrl-btn" id="next-page" title="Next Page" aria-label="Next Page">Next</button>
               </span>
-              <button type="button" class="ctrl-btn ctrl-btn-icon" id="zoom-out" title="Zoom Out" aria-label="Zoom Out">
-                <svg viewBox="0 0 24 24"><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              </button>
-              <button type="button" class="ctrl-btn ctrl-btn-icon" id="zoom-in" title="Zoom In" aria-label="Zoom In">
-                <svg viewBox="0 0 24 24"><line x1="12" y1="5" x2="12" y2="19"></line><line x1="5" y1="12" x2="19" y2="12"></line></svg>
-              </button>
+              <button type="button" class="ctrl-btn" id="zoom-out" title="Zoom Out" aria-label="Zoom Out">-</button>
+              <button type="button" class="ctrl-btn" id="zoom-in" title="Zoom In" aria-label="Zoom In">+</button>
               <button type="button" class="ctrl-btn" id="zoom-reset" title="Reset Zoom">100%</button>
             </div>
           </div>
 
           <div class="doc-viewport" id="pdf-container">
-            <div class="pdf-stage" id="pdf-canvas-wrapper" style="__PDF_WRAPPER_STYLE__">
-              <canvas id="pdf-canvas"></canvas>
+            <div class="pdf-stage" id="pdf-stage-wrapper" style="__PDF_WRAPPER_STYLE__">
+              <canvas id="pdf-render-frame"></canvas>
             </div>
             <iframe class="pdf-embed-fallback" id="pdf-embed-frame" title="Embedded PDF Fallback" style="display: none;" src="__PDF_SRC__"></iframe>
             <div class="image-stage" id="image-wrapper" style="__IMG_WRAPPER_STYLE__">
@@ -2068,14 +2031,14 @@ __DATALIST_OPTIONS_HTML__
         <div class="bento-pane">
           <div class="pane-head">
             <div class="pane-title-group">
-              <h2 class="pane-title">Judge × Field Verification Heatmap</h2>
+              <h2 class="pane-title">Judge x Field Verification Heatmap</h2>
               <span class="pane-subtitle">Dissent &amp; check intensity across parallel thinking judges</span>
             </div>
             <span class="mono-cell muted-cell" id="heatmap-quorum-label">__JUDGE_QUORUM__</span>
           </div>
           <div class="viz-stage" id="judge-heatmap-stage"></div>
           <div class="viz-legend">
-            <span class="legend-item"><span class="gradient-ramp" id="heatmap-ramp-swatch"></span>Dissent Density (0% → 100%)</span>
+            <span class="legend-item"><span class="gradient-ramp" id="heatmap-ramp-swatch"></span>Dissent Density (0% -> 100%)</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#059669;"></span>Pass</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#D97706;"></span>Partial Check</span>
             <span class="legend-item"><span class="legend-swatch" style="background:#E11D48;"></span>Fail / Conflation</span>
@@ -2111,7 +2074,7 @@ __DATALIST_OPTIONS_HTML__
         <div class="inspector-strip" id="judge-cell-inspector">
           <div>
             <span class="mono-key" id="inspector-cell-title">Select a matrix cell</span>
-            <span class="muted-cell" id="inspector-cell-body"> — Click any Judge × Field verdict below or in the heatmap above to inspect full reasoning justification.</span>
+            <span class="muted-cell" id="inspector-cell-body"> -- Click any Judge x Field verdict below or in the heatmap above to inspect full reasoning justification.</span>
           </div>
           <span class="mono-cell muted-cell" id="inspector-cell-meta">__JUDGE_MODEL__</span>
         </div>
@@ -2147,7 +2110,7 @@ __DATALIST_OPTIONS_HTML__
           <div class="pane-head">
             <div class="pane-title-group">
               <h2 class="pane-title">Interactive Relationship Node Map</h2>
-              <span class="pane-subtitle">Deterministic provenance topology: Sections → Fields → Judges → Routing</span>
+              <span class="pane-subtitle">Deterministic provenance topology: Sections -> Fields -> Judges -> Routing</span>
             </div>
             <div class="pane-actions">
               <button type="button" class="ctrl-btn" id="reset-nodemap-btn">Reset Viewport</button>
@@ -2155,7 +2118,7 @@ __DATALIST_OPTIONS_HTML__
           </div>
           <div class="viz-stage-unpadded">
             <svg id="relationship-node-svg" viewBox="0 0 840 390" aria-label="Interactive Relationship Node Map"></svg>
-            <div class="viz-hud" id="nodemap-hud">Drag to pan · Scroll to zoom · Hover node to trace provenance edges</div>
+            <div class="viz-hud" id="nodemap-hud">Drag to pan | Scroll to zoom | Hover node to trace provenance edges</div>
           </div>
           <div class="viz-legend">
             <span class="legend-item"><span class="legend-swatch" style="background:#0D9488;"></span>Source Section</span>
@@ -2277,7 +2240,7 @@ __DATALIST_OPTIONS_HTML__
 
       const THEME_TOKENS = {
         light: {
-          canvas: "#FAFAF9",
+          pageBg: "#FAFAF9",
           surface: "#FFFFFF",
           border: "#E7E5E4",
           grid: "#E7E5E4",
@@ -2285,7 +2248,7 @@ __DATALIST_OPTIONS_HTML__
           textSecondary: "#787774"
         },
         dark: {
-          canvas: "#0D0E11",
+          pageBg: "#0D0E11",
           surface: "#16171D",
           border: "#292A30",
           grid: "#292A30",
@@ -2558,9 +2521,9 @@ __DATALIST_OPTIONS_HTML__
        * 4. MULTIMODAL DOCUMENT VIEWER (PDF.js + Image Zoom/Pan)
        * ========================================================================= */
       function renderPdfPage(pageNumber) {
-        const canvas = document.getElementById("pdf-canvas");
+        const pdfFrame = document.getElementById("pdf-render-frame");
         const pageDisplay = document.getElementById("page-num-display");
-        if (!STATE.pdf.doc || !canvas) return;
+        if (!STATE.pdf.doc || !pdfFrame) return;
 
         const clamped = Math.max(1, Math.min(STATE.pdf.doc.numPages, pageNumber));
         STATE.pdf.pageNum = clamped;
@@ -2578,10 +2541,10 @@ __DATALIST_OPTIONS_HTML__
           if (STATE.pdf.renderSeq !== seq || !STATE.pdf.doc) return;
           return STATE.pdf.doc.getPage(clamped).then((page) => {
             if (STATE.pdf.renderSeq !== seq) return;
-            const ctx = canvas.getContext("2d");
+            const ctx = pdfFrame.getContext("2d");
             const viewport = page.getViewport({ scale: STATE.pdf.scale });
-            canvas.width = viewport.width;
-            canvas.height = viewport.height;
+            pdfFrame.width = viewport.width;
+            pdfFrame.height = viewport.height;
             const task = page.render({ canvasContext: ctx, viewport });
             STATE.pdf.renderTask = task;
             return task.promise.then(() => {
@@ -2600,9 +2563,9 @@ __DATALIST_OPTIONS_HTML__
       }
 
       function showPdfEmbedFallback() {
-        const canvasWrap = document.getElementById("pdf-canvas-wrapper");
+        const stageWrap = document.getElementById("pdf-stage-wrapper");
         const embed = document.getElementById("pdf-embed-frame");
-        if (canvasWrap) canvasWrap.style.display = "none";
+        if (stageWrap) stageWrap.style.display = "none";
         if (embed && STATE.docB64) {
           embed.src = `data:application/pdf;base64,${STATE.docB64}`;
           embed.style.display = "block";
@@ -2612,7 +2575,7 @@ __DATALIST_OPTIONS_HTML__
       function refreshDocumentViewer(resetPage = false) {
         const isImg = (STATE.mimeType || "").startsWith("image/");
         const pdfControls = document.getElementById("pdf-page-controls");
-        const pdfWrap = document.getElementById("pdf-canvas-wrapper");
+        const pdfWrap = document.getElementById("pdf-stage-wrapper");
         const pdfEmbed = document.getElementById("pdf-embed-frame");
         const imgWrap = document.getElementById("image-wrapper");
         const imgEl = document.getElementById("source-doc-image");
@@ -2637,7 +2600,7 @@ __DATALIST_OPTIONS_HTML__
         }
         if (viewerSub) {
           viewerSub.textContent = STATE.docFilename
-            ? `${STATE.docFilename} · ${STATE.mimeType}`
+            ? `${STATE.docFilename} | ${STATE.mimeType}`
             : `Source visual grounding (${STATE.mimeType})`;
         }
 
@@ -2785,7 +2748,7 @@ __DATALIST_OPTIONS_HTML__
           }
           const st = consensus[k]?.status || (density > 0 ? "PASS" : "FAIL");
           items.push({
-            label: k.length > 21 ? `${k.slice(0, 20)}…` : k,
+            label: k.length > 21 ? `${k.slice(0, 20)}...` : k,
             raw: rawDesc,
             norm: density,
             color: statusColorHex(st)
@@ -2855,18 +2818,18 @@ __DATALIST_OPTIONS_HTML__
         const fe = jr?.evaluations?.find((ev) => ev.field_name === fieldName);
         const c = (STATE.report.consensus_breakdown || {})[fieldName] || {};
 
-        titleEl.textContent = `${fieldName} · Judge #${judgeIdx}`;
+        titleEl.textContent = `${fieldName} | Judge #${judgeIdx}`;
         if (fe) {
           const corr = fe.proposed_correction !== null && fe.proposed_correction !== undefined
-            ? ` · Proposed correction: ${JSON.stringify(fe.proposed_correction)}`
+            ? ` | Proposed correction: ${JSON.stringify(fe.proposed_correction)}`
             : "";
-          bodyEl.textContent = ` — [${fe.verdict} | Syn:${fe.syntactic_check} | Gnd:${fe.grounding_check} | Mode:${fe.failure_mode}] ${fe.justification}${corr}`;
-          metaEl.textContent = jr.execution_time_seconds ? `${jr.execution_time_seconds.toFixed(2)}s · ${jr.model_name || ""}` : (jr.model_name || "");
+          bodyEl.textContent = ` -- [${fe.verdict} | Syn:${fe.syntactic_check} | Gnd:${fe.grounding_check} | Mode:${fe.failure_mode}] ${fe.justification}${corr}`;
+          metaEl.textContent = jr.execution_time_seconds ? `${jr.execution_time_seconds.toFixed(2)}s | ${jr.model_name || ""}` : (jr.model_name || "");
         } else if (jr?.error) {
-          bodyEl.textContent = ` — Quorum error: ${jr.error}`;
+          bodyEl.textContent = ` -- Quorum error: ${jr.error}`;
           metaEl.textContent = "Error";
         } else {
-          bodyEl.textContent = ` — Consensus status: ${c.status || "N/A"} (${c.agreement_ratio || ""})`;
+          bodyEl.textContent = ` -- Consensus status: ${c.status || "N/A"} (${c.agreement_ratio || ""})`;
           metaEl.textContent = STATE.report.judge_model || "";
         }
       }
@@ -2946,7 +2909,7 @@ __DATALIST_OPTIONS_HTML__
           const rampFill = heatmapRampColor(dissentIntensity);
           const dx = leftPad + reqJudges * colW + 4;
           const textColor = dissentIntensity > 0.35 ? "#FFFFFF" : tok.textPrimary;
-          const shortFn = fn.length > 23 ? `${fn.slice(0, 22)}…` : fn;
+          const shortFn = fn.length > 23 ? `${fn.slice(0, 22)}...` : fn;
 
           return `
             <text x="${leftPad - 8}" y="${y + 14}" text-anchor="end" fill="${tok.textPrimary}" font-family="IBM Plex Mono, monospace" font-size="9.5">${escHtml(shortFn)}</text>
@@ -3086,7 +3049,7 @@ __DATALIST_OPTIONS_HTML__
           const pct = Math.max(0, Math.min(100, (count / total) * 100));
           const bw = Math.max(2, (pct / 100) * plotW);
           const color = statusColorHex(c.status);
-          const shortFn = fn.length > 24 ? `${fn.slice(0, 23)}…` : fn;
+          const shortFn = fn.length > 24 ? `${fn.slice(0, 23)}...` : fn;
           return `
             <text x="${leftPad - 8}" y="${y + 14}" text-anchor="end" fill="${tok.textPrimary}" font-family="IBM Plex Mono, monospace" font-size="9.5">${escHtml(shortFn)}</text>
             <rect x="${leftPad}" y="${y + 4}" width="${plotW}" height="13" rx="2" fill="none" stroke="${tok.grid}" stroke-width="0.75" />
@@ -3122,7 +3085,7 @@ __DATALIST_OPTIONS_HTML__
           const crit = criteria.find((c) => c.field_name === fn);
           const rawSec = crit?.semantic_grounding_rules?.source_section || "DOCUMENT ROOT";
           const cleaned = rawSec.replace(/^SECTION\s+\d+:\s*/i, "");
-          const secLabel = cleaned.length > 20 ? `${cleaned.slice(0, 19)}…` : cleaned;
+          const secLabel = cleaned.length > 20 ? `${cleaned.slice(0, 19)}...` : cleaned;
           if (!sectionMap.has(secLabel)) sectionMap.set(secLabel, []);
           sectionMap.get(secLabel).push(fn);
         });
@@ -3165,13 +3128,13 @@ __DATALIST_OPTIONS_HTML__
           const colHex = statusColorHex(c.status);
           nodes.push({
             id: `fld:${fn}`,
-            label: fn.length > 18 ? `${fn.slice(0, 17)}…` : fn,
+            label: fn.length > 18 ? `${fn.slice(0, 17)}...` : fn,
             col: 1,
             x: 368,
             y,
             r: 6,
             color: colHex,
-            detail: `Field ${fn} · ${c.status || "EVALUATED"} (${c.agreement_ratio || ""})`
+            detail: `Field ${fn} | ${c.status || "EVALUATED"} (${c.agreement_ratio || ""})`
           });
         });
 
@@ -3191,8 +3154,8 @@ __DATALIST_OPTIONS_HTML__
             r: 7.5,
             color: hasErr ? PALETTE.rose : PALETTE.indigo,
             detail: jr
-              ? `Judge #${j} (${jr.model_name || "LLM"}) · ${jr.execution_time_seconds ? jr.execution_time_seconds.toFixed(2) + "s" : "active"}`
-              : `Judge #${j} · Parallel verification worker`
+              ? `Judge #${j} (${jr.model_name || "LLM"}) | ${jr.execution_time_seconds ? jr.execution_time_seconds.toFixed(2) + "s" : "active"}`
+              : `Judge #${j} | Parallel verification worker`
           });
         }
 
@@ -3317,7 +3280,7 @@ __DATALIST_OPTIONS_HTML__
           });
           g.addEventListener("mouseleave", () => {
             STATE.nodeMap.hoveredId = null;
-            if (hud) hud.textContent = "Drag to pan · Scroll to zoom · Hover node to trace provenance edges";
+            if (hud) hud.textContent = "Drag to pan | Scroll to zoom | Hover node to trace provenance edges";
             renderRelationshipNodeMap();
           });
         });
@@ -3474,8 +3437,8 @@ __DATALIST_OPTIONS_HTML__
           if (el) el.textContent = String(val);
         };
 
-        document.title = `${docType} — Multi-Agent Consensus Evaluation Dashboard`;
-        setTxt("brand-doc-subtitle", `${docType} · Rubric v${rubricVer}`);
+        document.title = `${docType} -- Multi-Agent Consensus Evaluation Dashboard`;
+        setTxt("brand-doc-subtitle", `${docType} | Rubric v${rubricVer}`);
         setTxt("meta-doc-type", docType);
         setTxt("meta-extractor", `${extractorModel} (budget:0)`);
         setTxt("meta-judges", `${succJudges}/${reqJudges}x ${judgeModel}`);
@@ -3518,7 +3481,7 @@ __DATALIST_OPTIONS_HTML__
         if (datalistEl) {
           datalistEl.innerHTML = STATE.availableModels.map((m) => `<option value="${escHtml(m)}"></option>`).join("");
         }
-        setTxt("available-models-caption", `Run Command Preview (${STATE.availableModels.length} models suggested · any custom model ID supported)`);
+        setTxt("available-models-caption", `Run Command Preview (${STATE.availableModels.length} models suggested | any custom model ID supported)`);
         updateCommandBuilder();
 
         const candPre = document.getElementById("candidate-extraction-json");
@@ -3528,7 +3491,7 @@ __DATALIST_OPTIONS_HTML__
         const fullAuditStr = JSON.stringify(r, null, 2);
         const auditPre = document.getElementById("full-audit-json");
         if (auditPre) auditPre.textContent = fullAuditStr;
-        setTxt("audit-bytes-label", `${fullAuditStr.length.toLocaleString()} bytes · UTF-8`);
+        setTxt("audit-bytes-label", `${fullAuditStr.length.toLocaleString()} bytes | UTF-8`);
 
         // Extracted Field Breakdown Table (Tab 2)
         const extBody = document.getElementById("extracted-fields-tbody");
@@ -3564,7 +3527,7 @@ __DATALIST_OPTIONS_HTML__
                 const c = consMap[fn] || {};
                 const st = String(c.status || "CANDIDATE");
                 const ratio = String(c.agreement_ratio || "").split(" ")[0];
-                const pillTxt = ratio ? `${st} · ${ratio}` : st;
+                const pillTxt = ratio ? `${st} | ${ratio}` : st;
                 const cls = statusPillClass(st);
                 return `<tr><td class="mono-key">${escHtml(fn)}</td><td class="mono-cell muted-cell">${escHtml(dtype)}</td><td class="mono-cell code-cell">${escHtml(preview)}</td><td><span class="status-pill ${cls}">${escHtml(pillTxt)}</span></td></tr>`;
               }).join("");
@@ -3580,7 +3543,7 @@ __DATALIST_OPTIONS_HTML__
             rubricBody.innerHTML = criteria.map((c) => {
               const syn = c.syntactic_rules || {};
               const sem = c.semantic_grounding_rules || {};
-              const parts = [`${escHtml(syn.type || "string")} · ${syn.required === false ? "opt" : "req"}`];
+              const parts = [`${escHtml(syn.type || "string")} | ${syn.required === false ? "opt" : "req"}`];
               if (syn.format_regex) parts.push(`/${escHtml(syn.format_regex)}/`);
               if (Array.isArray(syn.expected_subfields)) parts.push(`[${syn.expected_subfields.map(escHtml).join(", ")}]`);
               if (c.field_type || syn.field_type) parts.push(escHtml(c.field_type || syn.field_type));
@@ -3591,7 +3554,7 @@ __DATALIST_OPTIONS_HTML__
                 <tr>
                   <td class="mono-key">${escHtml(c.field_name)}</td>
                   <td class="mono-cell">${parts.join("<br/>")}</td>
-                  <td class="mono-cell">${escHtml(sem.source_section || "—")}</td>
+                  <td class="mono-cell">${escHtml(sem.source_section || "--")}</td>
                   <td><div>${escHtml(sem.verification_criteria || "")}</div>${fms ? `<div class="fm-token-row">${fms}</div>` : ""}</td>
                 </tr>
               `;
@@ -3681,7 +3644,7 @@ __DATALIST_OPTIONS_HTML__
                   <div class="ledger-row">
                     <div class="ledger-row-top">
                       <span class="mono-key">${escHtml(exc.field_name)}</span>
-                      <span class="status-pill ${cls}">${escHtml(exc.status)} · ${escHtml(exc.agreement_ratio || "")}</span>
+                      <span class="status-pill ${cls}">${escHtml(exc.status)} | ${escHtml(exc.agreement_ratio || "")}</span>
                     </div>
                     <div class="ledger-meta"><span>Candidate:</span> <code>${escHtml(JSON.stringify(exc.candidate_value))}</code></div>
                     <div class="ledger-meta"><span>Failure Modes:</span> ${fms}</div>
@@ -3701,7 +3664,7 @@ __DATALIST_OPTIONS_HTML__
             ? `<tr><td colspan="6" class="empty-cell">No provenance audit trail entries available.</td></tr>`
             : audit.map((item) => {
                 const cls = statusPillClass(item.status);
-                const fms = (item.failure_modes || []).map((m) => `<span class="fm-token">${escHtml(m)}</span>`).join(" ") || "—";
+                const fms = (item.failure_modes || []).map((m) => `<span class="fm-token">${escHtml(m)}</span>`).join(" ") || "--";
                 const diss = (item.dissent_reasons || []).length
                   ? item.dissent_reasons.map(escHtml).join("; ")
                   : "Verified across active judge quorum";

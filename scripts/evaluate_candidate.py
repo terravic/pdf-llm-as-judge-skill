@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """Evaluation-only script running 5x Judge Panel and Consensus Engine on candidate JSON."""
 
 import argparse

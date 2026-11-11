@@ -1,98 +1,86 @@
 # Dashboard Design Specification
 
-This document defines the visual, structural, and technical specifications for standalone interactive HTML dashboards. It applies universally across dashboard views, charting studios, and network visualizations.
+This document defines the visual, structural, and technical specifications for the standalone interactive HTML evaluation dashboard (`dashboard.html`).
 
 ---
 
-## 1. Visual Hierarchy and Typography Rules
+## 1. Visual Hierarchy and Typography
 
 | Design Dimension | Specification | Implementation Standard |
 |---|---|---|
-| **Typography** | Distinct typographic hierarchy across prose, headers, and tabular values. | Pair a clean sans-serif UI font (`DM Sans` or `Geist Sans`), a serif display font (`Instrument Serif`), and a tabular monospaced font (`IBM Plex Mono` or `Geist Mono`). Avoid generic defaults such as `Inter` or `Roboto`. |
-| **Surfaces and Depth** | Flat, solid surface tokens with clear structural boundaries. | Use solid background tokens and `1px solid` borders (`6px` to `8px` radius) for separation instead of multi-stop color gradients. |
-| **Container Layout** | Single-level bento-style grid organization. | Partition panes using flat grid cells and thin dividers rather than nested card-in-card containers. |
-| **Status Indicators** | High-signal state reporting. | Highlight warning, error, or critical states explicitly; render nominal items using standard monospaced or muted tokens. |
-| **Background Surfaces** | Uncluttered viewport backgrounds for node maps and workspaces. | Reserve gridlines strictly for quantitative chart axes and coordinate plots. |
-| **Control Surfaces** | Text-first section headers with icon-based action controls where specified. | Use text hierarchy for card and section titles; restrict icons to functional interactive controls such as the theme mode selector. |
+| **Typography** | Distinct typographic hierarchy across prose, headers, and tabular values. | Pair `DM Sans` for UI prose and controls, `Instrument Serif` for display titles, and `IBM Plex Mono` (`font-variant-numeric: tabular-nums`) for numerical, code, and tabular cells. |
+| **Surfaces and Depth** | Flat, solid surface tokens with crisp structural boundaries. | Use solid background tokens and `1px solid` borders (`6px` to `8px` radius) for pane separation without color gradients. |
+| **Container Layout** | Single-level bento-style grid organization. | Partition panes using flat grid cells and thin horizontal dividers rather than nested containers. |
+| **Status Indicators** | Semantic state reporting. | Highlight warning, contested, or rejected states with semantic status tokens; render nominal items using monospaced and neutral tokens. |
+| **Background Surfaces** | Uncluttered viewport backgrounds for workspaces and node maps. | Reserve gridlines strictly for quantitative chart axes and coordinate plots. |
+| **Control Surfaces** | Text-first section headers and compact action controls. | Use typographic hierarchy for section titles and compact segmented controls for global mode selection. |
 
 ---
 
 ## 2. Runtime Environment and Technical Architecture
 
-* **Self-Contained Execution:** Dashboards must run inside standard browsers as well as sandboxed or embedded webviews using standard HTML5, CSS custom properties, and JavaScript.
-* **Dynamic State Updates:** UI components must support incremental state updates and live data refresh without resetting user viewport state, scroll position, or active chart/camera interactions.
-* **Standalone Output (`dashboard.html`):** Build workflows emit a self-contained `dashboard.html` file at the project root (or active workspace directory) that can be opened directly from disk or served over HTTP with Server-Sent Events (SSE).
-* **Empirical Data Rendering:** Views must render the actual computed dataset, provenance records, and telemetry events from the active workspace.
+* **Self-Contained Execution:** The dashboard executes inside standard web browsers and embedded webviews using HTML5, CSS custom properties, SVG vector charts, and vanilla JavaScript without build-step requirements.
+* **Dynamic State Updates:** UI components support incremental state updates (`window.updateDashboardState(...)`), in-browser file loading and drag-and-drop (`FileReader`), URL query loading (`?report=<url>`), and HTTP Server-Sent Events (`/events`) without resetting scroll position, active tab selection, filter inputs, or node-map pan/zoom coordinates.
+* **Singular Standalone Output (`dashboard.html`):** Pipeline execution emits `dashboard.html` at the project root pre-loaded with workspace evaluation data while remaining usable for inspecting new PDF or image documents.
+* **Model Configuration and Command Builder:** Editable text inputs for Extractor Model, Judge Model, Thinking Budget, and Judge Count are backed by `<datalist>` suggestions discovered from active API credentials, generating copyable `/pdf-llm-as-judge` and CLI commands.
+* **Empirical Data Rendering:** Views render computed consensus metrics, field-level judge evaluations, provenance citations, and audit records directly from the active `PipelineReport` bundle.
 
 ---
 
 ## 3. Light, Dark, and System Theme Specifications
 
-The dashboard must natively support a clean light mode, a high-contrast dark mode, and an automatic system mode that follows the operating system appearance preference.
+The dashboard supports a light mode, a high-contrast dark mode, and an automatic system mode synchronized with the operating system appearance preference.
 
-* **Three-Icon Theme Selector:** The theme switcher in the top navigation bar is a compact segmented control consisting of three textless, minimalist SVG icon buttons placed side by side:
-  * **Light Mode (`#theme-btn-light`):** Sun SVG icon (`title="Light Theme"`, `aria-label="Light Theme"`, `data-theme-mode="light"`).
-  * **Dark Mode (`#theme-btn-dark`):** Crescent moon SVG icon (`title="Dark Theme"`, `aria-label="Dark Theme"`, `data-theme-mode="dark"`).
-  * **System Mode (`#theme-btn-system`):** Simple computer monitor SVG icon (`title="System Theme"`, `aria-label="System Theme"`, `data-theme-mode="system"`).
-  * Each button contains only its SVG icon, highlights the active mode via the `active` class and `aria-pressed="true"`, and persists the selected mode (`light`, `dark`, or `system`) in `localStorage`.
-* **Cross-Platform System Theme Detection (macOS, Linux, Windows):**
-  * **Browser / Webview Layer:** When `system` mode is selected, resolve the active theme via `window.matchMedia('(prefers-color-scheme: dark)')` and register a `'change'` listener so operating system appearance changes update the interface in real time.
-  * **Host OS Layer (Backend Fallback):** When generated by a local CLI or plugin running on the host operating system, query the native OS preference—`defaults read -g AppleInterfaceStyle` on macOS, `winreg` (`AppsUseLightTheme`) on Windows, or `GTK_THEME` / `gsettings` / `kdeglobals` on Linux—and embed `system_theme` in the data bundle as a fallback for headless or restricted webviews.
-* **Color Schemes:**
+* **Segmented Theme Selector (`#theme-toggle`):** Placed in the top navigation bar with three mode buttons:
+  * **Light Mode (`#theme-btn-light`):** Sun SVG symbol (`title="Light Theme"`, `aria-label="Light Theme"`, `data-theme-mode="light"`).
+  * **Dark Mode (`#theme-btn-dark`):** Crescent moon SVG symbol (`title="Dark Theme"`, `aria-label="Dark Theme"`, `data-theme-mode="dark"`).
+  * **System Mode (`#theme-btn-system`):** Monitor SVG symbol (`title="System Theme"`, `aria-label="System Theme"`, `data-theme-mode="system"`).
+  * Active selection applies the `active` class and `aria-pressed="true"`, persisting the selected mode (`light`, `dark`, or `system`) in `localStorage`.
+* **System Theme Resolution:**
+  * **Browser Layer:** When `system` mode is active, the interface queries `window.matchMedia('(prefers-color-scheme: dark)')` and attaches a `'change'` listener for real-time updates.
+  * **Host Environment Fallback:** When generated by the Python CLI, host theme detection embeds `system_theme` in the initial bundle as a fallback for restricted or headless webviews.
+* **Color Tokens:**
   * **Light Mode:**
-    * Background: `#FAFAF9` (Warm off-white)
-    * Cards & Surfaces: `#FFFFFF`
-    * Borders: `#E7E5E4` (`1px solid`, `6px` to `8px` border-radius)
+    * Page Background: `#FAFAF9`
+    * Surface / Pane: `#FFFFFF`
+    * Border: `#E7E5E4` (`1px solid`, `6px` to `8px` border-radius)
     * Text Primary: `#1C1917`
     * Text Secondary: `#787774`
   * **Dark Mode:**
-    * Background: `#0D0E11` (Deep charcoal)
-    * Cards & Surfaces: `#16171D`
-    * Borders: `#292A30` (`1px solid`, `6px` to `8px` border-radius)
+    * Page Background: `#0D0E11`
+    * Surface / Pane: `#16171D`
+    * Border: `#292A30` (`1px solid`, `6px` to `8px` border-radius)
     * Text Primary: `#ECE8E2`
     * Text Secondary: `#9A9895`
 
 ---
 
-## 4. Dashboard Layout and Component Rules
+## 4. Workspace Layout and Component Specifications
 
-All dashboard views balance information density with scannable layout structure and concise component titles.
+The workspace is organized into five domain-specific tabs below a telemetry summary strip and model configuration bar:
 
-* **Section Headings:** Keep component headers concise and descriptive of the underlying data domain.
-* **Tables:** Render numerical and tabular data in a monospaced font (`IBM Plex Mono` or `Geist Mono`) with `font-variant-numeric: tabular-nums` and thin horizontal row dividers.
-* **3D and Network Visualizations:**
-  * Use interactive 3D molecular or structural views where spatial geometry directly informs analysis, paired with a software projection fallback when hardware WebGL is unavailable.
-  * Use clear, domain-accurate component titles such as "Interactive Relationship Node Map" and "Structural Data Diagram."
-  * Keep layout and edge calculations deterministic and fast to maintain responsive pan and zoom performance.
+1. **Document & Rubric Inspector:** Multi-page PDF rendering (page navigation, zoom controls, and embedded fallback) or high-resolution image inspection paired with the `Verification Rubric Specification` table.
+2. **Primary Extraction:** Stage 1 JSON extraction payload, model and thinking-budget parameters, flat `Extracted Field Breakdown` table, and 2D `Extracted Field Completeness & Structure` chart.
+3. **Judge Panel Matrix:** `Judge x Field Verification Heatmap`, 2D `Judge Execution Latency & Pass Rate` chart, and 5-column `Parallel LLM Judge Evaluation Matrix` with interactive cell inspection.
+4. **Consensus & Routing:** 2D `Field Agreement Ratios` chart, pan/zoom SVG `Interactive Relationship Node Map` tracing provenance from document sections through fields and judges to routing outcomes, `Field-Level Consensus & Routing Table`, `Validated Clean Output Payload`, and `Exceptions & Dissent Ledger`.
+5. **Provenance & Audit Trail:** `Provenance Audit Trail` table and full JSON report viewer with clipboard copy and JSON download actions.
 
 ---
 
-## 5. Dynamic Data Visualization and Color Palette
+## 5. Data Visualization Color Palette
 
-While container surfaces remain neutral and structured, charts, heatmaps, and network/molecular graphs use a high-contrast semantic color palette against both light and dark backgrounds:
-
-### Data Visualization Color Palette
+Charts, heatmaps, and network graphs use a five-color semantic palette designed for legibility across both light and dark surfaces:
 
 | Color Role | Hex Code | Visual Application |
 |---|---|---|
-| **Vibrant Teal** | `#0D9488` | Primary data series, baseline metrics, structural bonds, nominal nodes. |
-| **Energetic Amber** | `#D97706` | Secondary data series, warning thresholds, intermediate intensity. |
-| **Vivid Indigo** | `#4F46E5` | Comparison series, distinct molecular groups, specialized network nodes. |
-| **Functional Emerald** | `#059669` | Passing metrics, positive outcomes, validated states. |
-| **Deep Rose** | `#E11D48` | Critical alerts, negative trends, threshold violations. |
+| **Vibrant Teal** | `#0D9488` | Primary data series, baseline metrics, section nodes, nominal links. |
+| **Energetic Amber** | `#D97706` | Secondary data series, contested thresholds, intermediate intensity. |
+| **Vivid Indigo** | `#4F46E5` | Comparison series, judge worker nodes, intermediate dissent density. |
+| **Functional Emerald** | `#059669` | Passing metrics, unanimous/majority consensus, auto-accept routing. |
+| **Deep Rose** | `#E11D48` | Critical alerts, rejected verdicts, dissent highlights. |
 
-### Visualization Guidelines
+### Visualization Rendering Rules
 
-* **Matrices and Heatmaps:** Transition smoothly from the surface background tone through **Vibrant Teal** (`#0D9488`) and **Vivid Indigo** (`#4F46E5`) to **Deep Rose** (`#E11D48`) so concentration gradients are legible in both themes.
-* **Network and Molecular Graphs:** Color nodes by category or validation state using the semantic palette above, with semi-transparent edge strokes derived from the connected node state.
-* **Chart Backgrounds and Gridlines:** Keep chart plot backgrounds transparent so they inherit the active light or dark surface color, and use subtle axis gridlines (`#E7E5E4` in light mode, `#292A30` in dark mode).
-
----
-
-## 6. Verification Checklist
-
-1. Does the build produce a self-contained `dashboard.html` file that renders both offline and via live SSE streaming?
-2. Does the theme selector present the three side-by-side icon buttons (Sun for Light, Moon for Dark, Computer Monitor for System) with real-time OS theme tracking?
-3. Do both Light Mode and Dark Mode apply the exact surface, border, and text hex tokens specified in Section 3?
-4. Do all 2D charts, 3D molecular views, and SVG node maps apply the semantic data visualization palette from Section 5 and re-render cleanly when switching themes?
-5. Does the dashboard display the live workspace data, provenance citations, and validation records without placeholder text?
+* **Matrices and Heatmaps:** Interpolate cell intensity from the active surface color through `#0D9488` and `#4F46E5` to `#E11D48`.
+* **Relationship Node Graphs:** Color nodes according to functional role or consensus outcome using the five semantic tokens, with deterministic coordinate layout and interactive pan/zoom transforms.
+* **Chart Backgrounds and Gridlines:** Keep plot backgrounds transparent so they inherit the active surface color, using `#E7E5E4` in light mode and `#292A30` in dark mode for axis gridlines.

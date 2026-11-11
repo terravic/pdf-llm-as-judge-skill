@@ -151,7 +151,7 @@ class ConsensusEngine:
         if total_judges >= 5:
             if passes == total_judges:
                 status = StatusClassification.UNANIMOUS_PASS
-                confidence = "Extreme Confidence (>=98%)"
+                confidence = "Very High Confidence (>=98%)"
                 routing = RoutingAction.AUTO_ACCEPT
                 accepted_val = candidate_value
             elif passes == total_judges - 1:

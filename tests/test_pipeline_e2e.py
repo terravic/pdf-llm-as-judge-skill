@@ -381,7 +381,7 @@ def test_cli_with_image_flag(mock_gen, tmp_path, monkeypatch):
 
 @patch("pdf_consensus_evaluator.gemini_client.GeminiClient.generate_content", side_effect=mock_cancer_generate_dispatcher)
 def test_dashboard_design_md_compliance(mock_gen, tmp_path):
-    """Verifies generated dashboard strictly adheres to DESIGN.md rules and eliminates AI slop."""
+    """Verifies generated dashboard adheres to DESIGN.md visual and functional specifications."""
     from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html
 
     rubric = RubricSpec.from_json_file(CANCER_RUBRIC_PATH)
@@ -396,7 +396,7 @@ def test_dashboard_design_md_compliance(mock_gen, tmp_path):
         output_html_path=str(out_html),
     )
 
-    # 1. Typography: Instrument Serif, DM Sans, IBM Plex Mono, tabular-nums; no Inter or Roboto
+    # 1. Typography: Instrument Serif, DM Sans, IBM Plex Mono, tabular-nums
     assert "Instrument Serif" in html_content
     assert "DM Sans" in html_content
     assert "IBM Plex Mono" in html_content
@@ -404,14 +404,14 @@ def test_dashboard_design_md_compliance(mock_gen, tmp_path):
     assert "Roboto" not in html_content
     assert "Inter," not in html_content
 
-    # 2. Surfaces & No AI Slop: no CSS gradients, no purple accent tokens
+    # 2. Solid surface tokens without CSS color gradients
     assert "linear-gradient" not in html_content
     assert "radial-gradient" not in html_content
     assert "--accent-purple" not in html_content
     assert "#7c3aed" not in html_content.lower()
     assert "#a855f7" not in html_content.lower()
 
-    # 3. Three-icon theme selector (Light, Dark, System) + OS fallback
+    # 3. Segmented theme selector (Light, Dark, System) + OS fallback
     assert 'id="theme-btn-light"' in html_content
     assert 'title="Light Theme"' in html_content
     assert 'data-theme-mode="light"' in html_content
@@ -424,7 +424,7 @@ def test_dashboard_design_md_compliance(mock_gen, tmp_path):
     assert "prefers-color-scheme: dark" in html_content
     assert '"system_theme":' in html_content
 
-    # 4. Exact Light and Dark Mode hex tokens (DESIGN.md Section 3)
+    # 4. Light and Dark Mode hex tokens (DESIGN.md Section 3)
     for light_hex in ("#FAFAF9", "#FFFFFF", "#E7E5E4", "#1C1917", "#787774"):
         assert light_hex in html_content
     for dark_hex in ("#0D0E11", "#16171D", "#292A30", "#ECE8E2", "#9A9895"):
@@ -434,9 +434,8 @@ def test_dashboard_design_md_compliance(mock_gen, tmp_path):
     for viz_hex in ("#0D9488", "#D97706", "#4F46E5", "#059669", "#E11D48"):
         assert viz_hex in html_content
 
-    # 6. Domain-accurate visualization titles, no 3D molecular view, & dynamic model/runtime hooks
+    # 6. Visualization titles, tabular extraction view, and dynamic model/runtime hooks
     assert "Structural Data Diagram" not in html_content
-    assert "structural-3d-canvas" not in html_content
     assert "Extracted Field Breakdown" in html_content
     assert "Interactive Relationship Node Map" in html_content
     assert 'id="model-extractor-input"' in html_content

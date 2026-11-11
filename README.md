@@ -1,8 +1,8 @@
 # Multi-Agent Document Extraction and Consensus Evaluator
 
-A multi-agent document extraction and consensus evaluation system that extracts structured data from PDF files and high-resolution images (including form structures with handwritten text, checkboxes, and fill-in-the-blank entries), evaluates candidate extractions using an ensemble panel of five parallel thinking-enabled LLM judges, and deterministically computes field-level consensus scores and routing decisions.
+A multi-agent document extraction and consensus evaluation system that extracts structured data from PDF files and images (including forms with handwritten text, checkboxes, and segmented character entries), evaluates candidate extractions using a parallel panel of five thinking-enabled LLM judges, and deterministically computes field-level consensus scores and routing decisions.
 
-Compatible with any modern AI agent harness supporting standard agent skills, plugins, and interactive UI dashboard rendering.
+Compatible with AI agent harnesses supporting standard skill definitions (`SKILL.md`), plugin manifests (`plugin.json`), command-line execution, and standalone HTML dashboard inspection (`dashboard.html`).
 
 ![Multi-Agent Document Extraction and Consensus Evaluator Architecture and UI Dashboard](assets/pipeline_workflow_dashboard.png)
 
@@ -10,7 +10,7 @@ Compatible with any modern AI agent harness supporting standard agent skills, pl
 
 ## System Overview and Architecture
 
-High-stakes document extraction requires both high throughput and rigorous validation to eliminate hallucinations, field transpositions, and formatting errors. This project implements a three-stage pipeline:
+Automated document extraction in clinical, financial, and operational workflows requires consistent throughput and structured verification to prevent transcription errors, ungrounded values, field transpositions, and formatting discrepancies. This project implements a three-stage pipeline:
 
 ```
 [Input Document (PDF/Image) + Target Extraction Rubric]
@@ -18,203 +18,255 @@ High-stakes document extraction requires both high throughput and rigorous valid
                        v
 +---------------------------------------------------------+
 | Stage 1: Primary Multimodal Extraction                  |
-| - Engine: Gemini 3.8 Flash (Thinking Budget: 0)         |
-| - Low temperature (0.1) for high precision parsing      |
-| - Handles typed text, form layouts & handwriting        |
-| - Output: candidate_extraction.json                     |
+| - Default Model: gemini-3.8-flash (Thinking Budget: 0)  |
+| - Low temperature (0.1) for deterministic field parsing |
+| - Handles typed text, form layouts, and handwriting     |
+| - Output: candidate_extraction JSON                     |
 +--------------------------+------------------------------+
                            |
                            v
 +---------------------------------------------------------+
 | Stage 2: Parallel 5x LLM-as-a-Judge Panel               |
-| - Engine: 5x Gemini 3.8 Flash (Thinking Budget: 2048+)  |
+| - Default Model: 5x gemini-3.8-flash (Budget: 2048+)    |
 | - Inputs: Source Document + Candidate JSON + Rubric     |
-| - Non-blocking concurrent execution (asyncio)           |
-| - Evaluates visual grounding & handwriting fidelity     |
-| - Output: 5 distinct structured evaluation payloads     |
+| - Concurrent asynchronous execution (asyncio.gather)    |
+| - Evaluates visual grounding and handwriting accuracy   |
+| - Output: 5 structured JudgeReport payloads             |
 +--------------------------+------------------------------+
                            |
                            v
 +---------------------------------------------------------+
 | Stage 3: Deterministic Consensus and Routing Engine     |
-| - Calculate field agreement ratio (k / 5 passes)        |
-| - Classify confidence: UNANIMOUS, MAJORITY, CONTESTED,  |
-|   or REJECTED                                           |
-| - Output: Validated JSON + Exception Report + Audit Log |
+| - Computes field agreement ratio (k / 5 passes)         |
+| - Classifies status: UNANIMOUS_PASS, MAJORITY_PASS,     |
+|   CONTESTED, or REJECTED                                |
+| - Output: Validated JSON + Exceptions + dashboard.html  |
 +---------------------------------------------------------+
 ```
 
 ### Stage Details
 
-1. **Stage 1: Primary Multimodal Extraction**
-   - High-throughput multimodal parsing using `gemini-3.8-flash` with thinking budget set to 0.
-   - Natively processes form structures, tabular grids, fill-in-the-blank fields, checkboxes, and handwritten entries (print or cursive) alongside digital text.
-   - Leverages template subtraction (mentally subtracting rigid comb dividers and baseline ticks) and pen ink contrast to isolate genuine handwritten characters from touching or overlapping printed form lines, boxes, or template labels.
-   - Converts the verification rubric criteria into structural schema instructions.
-   - Emits a raw candidate JSON payload.
+1. **Stage 1: Primary Multimodal Extraction (`pdf_consensus_evaluator/stage1_extractor.py`)**
+   - Multimodal parsing using `gemini-3.8-flash` (configurable via `--extractor-model`) with `thinking_budget` set to `0`.
+   - Processes form structures, tabular grids, fill-in-the-blank fields, checkboxes, and handwritten entries (print or cursive) alongside digital vector text.
+   - Applies template subtraction and ink contrast rules to separate handwritten strokes from touching or overlapping printed form lines, comb dividers, and template labels.
+   - Converts rubric extraction criteria into structured JSON schema instructions and emits a candidate JSON payload.
 
-2. **Stage 2: Parallel LLM-as-a-Judge Panel**
-   - Spawns five parallel, isolated judge calls using `gemini-3.8-flash` with active reasoning (`thinking_budget: 2048` tokens) and sample diversity.
-   - Executes an **Adversarial Forensic Protocol** within the thinking budget: maps repeating template baseline/comb intervals, isolates pen strokes via template subtraction, falsifies optical conflation artifacts (e.g. baseline ticks or comb dividers misread as character stems), and overturns erroneous candidates.
-   - Evaluates syntactic rules (data types, regex patterns, token lengths) and visual semantic grounding against the original document pages.
-   - Detects specific failure modes (e.g., `TEMPLATE_INK_CONFLATION`, `HALLUCINATION`, `FORMAT_MISMATCH`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`, `DIGIT_TRANSPOSITION`, `SECONDARY_CODE_EXTRACTED_AS_PRIMARY`, `ILLEGIBLE_HANDWRITING`, `CHECKBOX_MISINTERPRETED`).
+2. **Stage 2: Parallel LLM-as-a-Judge Panel (`pdf_consensus_evaluator/stage2_judge_panel.py`)**
+   - Launches five concurrent, isolated judge evaluations using `gemini-3.8-flash` (configurable via `--judge-model`) with reasoning enabled (`thinking_budget: 2048` tokens) and staggered sampling temperatures.
+   - Executes an **Adversarial Forensic Protocol** within the thinking budget: maps repeating template baseline and comb intervals, isolates pen strokes from pre-printed dividers, tests for optical conflation artifacts, and overturns erroneous candidate transcriptions.
+   - Evaluates syntactic rules (data types, regular expressions, token counts, required fields) and visual semantic grounding against source document pages.
+   - Attributes rejections to explicit failure modes (`TEMPLATE_INK_CONFLATION`, `HALLUCINATION`, `FORMAT_MISMATCH`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`, `DIGIT_TRANSPOSITION`, `SECONDARY_CODE_EXTRACTED_AS_PRIMARY`, `ILLEGIBLE_HANDWRITING`, `CHECKBOX_MISINTERPRETED`).
 
-3. **Stage 3: Deterministic Consensus and Routing**
-   - Post-processes judge verdicts into consensus metrics without extra model calls.
-   - Classification and routing table:
+3. **Stage 3: Deterministic Consensus and Routing (`pdf_consensus_evaluator/stage3_consensus.py`)**
+   - Aggregates judge verdicts into field-level consensus metrics without additional model calls:
 
 | Agreement Count (k / 5) | Status Classification | Confidence Band | Recommended Routing Action |
 | :--- | :--- | :--- | :--- |
-| 5 / 5 | UNANIMOUS_PASS | Extreme Confidence (>= 98%) | Auto-Accept |
-| 4 / 5 | MAJORITY_PASS | High Confidence (90-95%) | Auto-Accept with Warning (log single dissent) |
-| 3 / 5 | CONTESTED | Split Verdict (~60%) | Route to Human-in-the-Loop (HITL) |
-| <= 2 / 5 | REJECTED | Low Confidence / Failure | Flag for Extraction Failure / Resubmission |
+| 5 / 5 | `UNANIMOUS_PASS` | Very High Confidence (>=98%) | Auto-Accept |
+| 4 / 5 | `MAJORITY_PASS` | High Confidence (90-95%) | Auto-Accept with Warning (log single dissent) |
+| 3 / 5 | `CONTESTED` | Split Verdict (approx 60%) | Route to Human-in-the-Loop (HITL) |
+| <= 2 / 5 | `REJECTED` | Low Confidence / Failure | Flag for Extraction Failure / Resubmission |
 
-### Surgical ROI Cropping, Morphological Line Suppression & Comb Auto-Detection
+### Region-of-Interest Cropping, Morphological Line Suppression, and Comb Auto-Detection
 
-Structured forms frequently employ segmented character comb boxes with baseline tick marks or dividers (such as ID numbers, postal codes, and policy numbers). Downsampling full-page high-resolution scans often causes small comb boxes (<1.5% of total page area) to visually conflate baseline tick marks with handwritten pen strokes (for example, misinterpreting an open 'C' or 'o' touching a vertical tick mark as '4' or 'a').
+Structured forms often use segmented character comb boxes with vertical dividers or baseline tick marks (for example, member IDs, postal codes, and account numbers). Downsampling full-page scans can cause small comb boxes (`<1.5%` of page area) to blend printed tick marks with adjacent pen strokes (such as misreading an open `'C'` or `'o'` touching a vertical tick mark as `'4'` or `'a'`).
 
-To resolve this without altering standard document processing pipelines:
+To prevent template-ink conflation while preserving normal processing for typed documents:
 
-1. **Architectural Division**:
-   - **Stage 1 (Primary Extractor)**: Operates with thinking tokens disabled (`thinking_budget: 0`) as a fast, high-throughput multimodal pass across the document or image.
-   - **Stage 2 (Judge Panel)**: Operates with thinking tokens enabled (`thinking_budget: 2048+`) **AND** Image Preprocessing (morphological tick suppression and ROI cropping) to perform rigorous adversarial forensic audits.
-
-2. **High-Resolution Surgical Cropping (`crop_field_roi`)**:
-   - Rubric criteria define `field_type: "segmented_comb_box"` and optional normalized coordinates `bounding_box: [ymin, xmin, ymax, xmax]`.
-   - The region is cropped at full scan resolution with 3% contextual boundary padding to eliminate downsampling artifacts.
-
+1. **Stage Separation**:
+   - **Stage 1 (Primary Extractor)** runs with `thinking_budget: 0` for fast initial extraction.
+   - **Stage 2 (Judge Panel)** combines `thinking_budget: 2048+` with region-of-interest image preprocessing (`utils/comb_filter.py`) for independent forensic verification.
+2. **Region-of-Interest Cropping (`crop_field_roi`)**:
+   - Rubric criteria specify `field_type: "segmented_comb_box"` and optional normalized coordinates `bounding_box: [ymin, xmin, ymax, xmax]`, cropping at native scan resolution with 3% boundary padding.
 3. **Morphological Vertical Tick Suppression (`suppress_vertical_ticks`)**:
-   - Isolates and bleaches thin vertical tick marks and dividers ($\le 2\text{px}$) to background white (`255`) using morphological vertical structuring elements and vectorized run-length analysis, while strictly protecting curved character pen strokes ($\ge 3\text{px}$) for both black ballpoint/gel pen ink and colored ink.
-
+   - Isolates and bleaches thin vertical tick marks and dividers (`<= 2px`) to white (`255`) using morphological vertical kernels and run-length filtering while preserving thicker curved pen strokes (`>= 3px`).
 4. **Automated Comb Box Localization (`auto_detect_comb_rois`)**:
-   - Analyzes horizontal and vertical pixel projection profiles to automatically detect segmented comb box rows even when `bounding_box` is omitted from the rubric specification.
-
-5. **Stage 2 Adversarial Forensic Comb Audit**:
-   - The parallel judge panel executes a blind independent ink trace before inspecting candidate values, falsifies template-ink conflations (e.g., `'4'` -> `'C'`, `'a'` -> `'o'`), and overrules erroneous candidates with `failure_mode: "TEMPLATE_INK_CONFLATION"` and true ink corrections.
+   - Uses horizontal and vertical pixel projection profiles to detect segmented comb rows when `bounding_box` coordinates are omitted from the rubric.
+5. **Adversarial Comb Overturn**:
+   - Judges perform a blind ink trace on the cleaned crop prior to inspecting the candidate string, overturning conflated characters with `failure_mode: "TEMPLATE_INK_CONFLATION"` and supplying the corrected value.
 
 ---
 
-## Interactive UI Dashboard
+## Interactive UI Dashboard (`dashboard.html`)
 
-The skill generates a standalone, responsive UI dashboard (`dashboard.html`) upon executing the pipeline on an input PDF or image and rubric specification. It renders natively inside standard web browsers and iframe-capable agent environments, structured across five tabs from left to right:
+Pipeline execution generates a single self-contained HTML file at `dashboard.html` adhering to `DESIGN.md` specifications. It opens directly from disk in any standard web browser and also supports live Server-Sent Events (`/events`) and in-browser file loading across five tabs:
 
-1. **PDF & Rubric Inspector**: High-fidelity multi-page PDF or image rendering with page switching and zoom alongside verification rubric rules.
-2. **Primary Extraction**: Inspects candidate extracted fields, token budgets, model parameters, and a structured Extracted Field Breakdown table & completeness chart.
-3. **Judge Panel Matrix**: Judge × Field verification heatmap, latency chart, and parallel judge evaluation matrix displaying verdicts and failure mode citations.
-4. **Consensus & Routing**: Summary statistics strip, field consensus ratios, Interactive Relationship Node Map, confidence tiers, and validated clean payload.
-5. **Provenance & Audit Trail**: Complete JSON audit trail viewer with copy and export functionality.
+1. **Document & Rubric Inspector**: Multi-page PDF viewer (page navigation, zoom controls, and embedded fallback) or image viewer alongside the searchable `Verification Rubric Specification` table.
+2. **Primary Extraction**: Stage 1 candidate JSON payload, model and token parameters, flat `Extracted Field Breakdown` table, and 2D `Extracted Field Completeness & Structure` chart.
+3. **Judge Panel Matrix**: `Judge x Field Verification Heatmap`, 2D `Judge Execution Latency & Pass Rate` chart, and 5-column `Parallel LLM Judge Evaluation Matrix` with interactive verdict details.
+4. **Consensus & Routing**: Summary metrics strip, 2D `Field Agreement Ratios` chart, pan/zoom SVG `Interactive Relationship Node Map`, `Field-Level Consensus & Routing Table`, `Validated Clean Output Payload`, and `Exceptions & Dissent Ledger`.
+5. **Provenance & Audit Trail**: `Provenance Audit Trail` table and complete JSON report viewer with copy and JSON download controls.
 
-- **Model Selector & Command Builder**: Editable Extractor and Judge model inputs pre-populated with dynamically discovered Gemini models (`<datalist>`) while supporting any custom future model ID, generating one-click copyable `/pdf-llm-as-judge` and CLI commands.
-- **Theme Selector**: Switch between Light, Dark, and System modes with persistent preferences and live OS appearance tracking.
+Additional interactive controls:
+- **Model Configuration & Command Builder**: Editable text fields for Stage 1 Extractor Model, Stage 2 Judge Model, Thinking Budget, and Judge Count backed by `<datalist>` suggestions discovered from active credentials, generating copyable `/pdf-llm-as-judge` and CLI commands for any current or future model ID.
+- **Load Run / PDF & Drag-and-Drop**: Load new `.json` evaluation reports, `.pdf` documents, or image scans directly in the browser without restarting or rebuilding.
+- **Segmented Theme Selector**: Switch between Light, Dark, and System modes with `localStorage` persistence and real-time operating system theme synchronization.
 
 ---
 
 ## Directory Structure
 
+All paths below are relative to the project root directory:
+
+```text
+.
+|-- .gitignore                                                  # Git ignore rules
+|-- DESIGN.md                                                   # Dashboard visual and technical specification
+|-- LICENSE                                                     # Apache License 2.0
+|-- README.md                                                   # Project documentation and user guide
+|-- SKILL.md                                                    # Agent skill definition and workflow instructions
+|-- dashboard.html                                              # Standalone interactive HTML evaluation dashboard
+|-- plugin.json                                                 # Agent plugin registration manifest
+|-- prd.md                                                      # Product Requirements Document
+|-- pyproject.toml                                              # Python package configuration and dependencies
+|-- assets/
+|   `-- pipeline_workflow_dashboard.png                         # Pipeline architecture and dashboard overview diagram
+|-- output/
+|   `-- test_cancer_screening_evaluation.json                   # Sample 5-judge consensus evaluation report
+|-- pdf_consensus_evaluator/
+|   |-- __init__.py                                             # Package root and public exports
+|   |-- cli.py                                                  # Command-line argument parser and entry point
+|   |-- dashboard_generator.py                                  # Standalone HTML dashboard generator
+|   |-- gemini_client.py                                        # Multimodal API client with retry and auth resolution
+|   |-- models.py                                               # Dataclasses, schemas, and enumerations
+|   |-- pipeline.py                                             # Three-stage pipeline orchestrator
+|   |-- stage1_extractor.py                                     # Stage 1 primary multimodal extractor
+|   |-- stage2_judge_panel.py                                   # Stage 2 parallel 5x thinking judge panel
+|   `-- stage3_consensus.py                                     # Stage 3 deterministic consensus and routing engine
+|-- samples/
+|   |-- cancer_screening_lab_report.jpg                         # Synthetic molecular diagnostics report (JPEG image)
+|   |-- cancer_screening_lab_report.pdf                         # Synthetic molecular diagnostics report (vector PDF)
+|   |-- cancer_screening_lab_report_degraded.pdf                # Synthetic degraded image-only scan PDF
+|   |-- cancer_screening_lab_report_scanned.pdf                 # Synthetic flatbed-scanned image-only PDF
+|   |-- expected_candidate_cancer_screening_lab_report.json     # Reference candidate extraction for lab report
+|   |-- expected_candidate_cancer_screening_lab_report_degraded.json # Reference candidate for degraded scan
+|   |-- expected_candidate_healthcare_patient_intake_form.json  # Reference candidate extraction for intake form
+|   |-- healthcare_patient_intake_form.pdf                      # Synthetic patient intake form PDF
+|   |-- rubric_spec_cancer_screening_lab_report.json            # Verification rubric for molecular lab report
+|   `-- rubric_spec_healthcare_patient_intake_form.json         # Verification rubric for patient intake form
+|-- scripts/
+|   |-- evaluate_candidate.py                                   # CLI script for Stage 2 + Stage 3 candidate evaluation
+|   `-- run_pipeline.py                                         # CLI script for full end-to-end pipeline execution
+|-- tests/
+|   |-- __init__.py                                             # Test suite package initializer
+|   |-- test_comb_filter.py                                     # ROI cropping and comb-line suppression tests
+|   |-- test_consensus.py                                       # Consensus vote aggregation and degraded quorum tests
+|   |-- test_models.py                                          # Rubric and model serialization tests
+|   |-- test_pipeline_e2e.py                                    # End-to-end pipeline and dashboard specification tests
+|   |-- test_stage1_and_judge_prompts.py                        # Extractor and forensic judge prompt tests
+|   `-- test_synthetic_discrepancies.py                         # Synthetic error injection and rejection tests
+`-- utils/
+    |-- __init__.py                                             # Utilities package initializer
+    `-- comb_filter.py                                          # ROI cropping and morphological tick suppression
 ```
-pdf-llm-as-judge-skill/
-├── .gitignore                                      # Git ignore rules
-├── DESIGN.md                                       # Dashboard visual & technical design specification
-├── SKILL.md                                        # Main skill instruction file for AI agents
-├── plugin.json                                     # Plugin registration manifest
-├── README.md                                       # Project documentation
-├── prd.md                                          # Product Requirements Document
-├── pyproject.toml                                  # Python package configuration
-├── LICENSE                                         # Apache 2.0 license
-├── dashboard.html                                  # Singular standalone interactive UI Dashboard
-├── assets/
-│   └── pipeline_workflow_dashboard.png             # Architecture pipeline and dashboard diagram
-├── output/
-│   └── test_cancer_screening_evaluation.json       # Sample generated evaluation report
-├── scripts/
-│   ├── run_pipeline.py                             # Command-line entry point for full pipeline
-│   └── evaluate_candidate.py                       # Evaluation-only script for pre-extracted candidate
-├── pdf_consensus_evaluator/
-│   ├── __init__.py                                 # Package root and public exports
-│   ├── models.py                                   # Schemas, dataclasses, and enums
-│   ├── gemini_client.py                            # Multimodal API client with mock engine
-│   ├── stage1_extractor.py                         # Stage 1 primary multimodal extractor
-│   ├── stage2_judge_panel.py                       # Stage 2 parallel 5x judge panel
-│   ├── stage3_consensus.py                         # Stage 3 deterministic consensus aggregator
-│   ├── dashboard_generator.py                      # HTML Dashboard generator
-│   ├── pipeline.py                                 # End-to-end pipeline orchestrator
-│   └── cli.py                                      # Command-line interface logic
-├── utils/
-│   ├── __init__.py                                 # Utilities package root
-│   └── comb_filter.py                              # Surgical ROI cropping and comb line suppression
-├── samples/
-│   ├── healthcare_patient_intake_form.pdf          # Patient intake form sample PDF
-│   ├── rubric_spec_healthcare_patient_intake_form.json # Intake form rubric specification
-│   ├── expected_candidate_healthcare_patient_intake_form.json # Intake form reference extraction
-│   ├── cancer_screening_lab_report.pdf             # Cancer screening molecular diagnostics PDF (vector text)
-│   ├── cancer_screening_lab_report.jpg             # Cancer screening report sample image (JPEG)
-│   ├── cancer_screening_lab_report_scanned.pdf     # Cancer screening report (100% image-only, flatbed scanner artifacts)
-│   ├── cancer_screening_lab_report_degraded.pdf    # Cancer screening report (100% image-only, heavy noise & smudge)
-│   ├── rubric_spec_cancer_screening_lab_report.json # Cancer screening rubric specification
-│   ├── expected_candidate_cancer_screening_lab_report.json # Cancer screening reference extraction
-│   └── expected_candidate_cancer_screening_lab_report_degraded.json # Reference extraction for degraded sample
-└── tests/
-    ├── __init__.py                                 # Test package root
-    ├── test_models.py                              # Schema and deserialization tests
-    ├── test_consensus.py                           # Consensus calculation and quorum tests
-    ├── test_stage1_and_judge_prompts.py            # Prompt construction and adversarial protocol tests
-    ├── test_synthetic_discrepancies.py             # Error injection and rejection tests
-    ├── test_comb_filter.py                         # Comb filter and surgical crop test suite
-    └── test_pipeline_e2e.py                        # End-to-end integration and dashboard tests
-```
+
+---
+
+## User Guide for Non-Technical Users
+
+This guide explains how to use the skill to read and verify information from everyday documents -- such as patient intake packets, laboratory reports, insurance forms, and scanned registration cards -- without writing code.
+
+### What Problem This Solves
+
+When a single automated reader scans a form or PDF, small mistakes can slip through unnoticed: two digits in an identification number might be swapped, a clinic's street address might be copied into the patient's home address field, or a handwritten letter touching a printed box border might be misread.
+
+Instead of relying on a single automated pass, this skill uses a two-layer review process modeled after an independent audit panel:
+1. **Initial Reader**: One reader extracts all requested fields from your PDF or image.
+2. **Five Independent Reviewers (Judges)**: Five separate AI reviewers inspect the original document pages at the same time and check every extracted value against your checklist (called a **rubric**).
+3. **Clear Voting Rules**:
+   - **5 of 5 reviewers agree (`UNANIMOUS_PASS`)**: Accepted automatically.
+   - **4 of 5 reviewers agree (`MAJORITY_PASS`)**: Accepted automatically, while recording the single reviewer's note.
+   - **3 of 5 reviewers agree (`CONTESTED`)**: Flagged for a human team member to check, showing both sides' notes.
+   - **2 or fewer reviewers agree (`REJECTED`)**: Rejected so an inaccurate value is not entered into downstream records.
+
+### Real-World Examples
+
+#### Example 1: Verifying a Patient Intake Form (PDF)
+Suppose a clinic front desk receives a completed multi-page patient intake PDF (`samples/healthcare_patient_intake_form.pdf`) and wants to verify the patient's legal name, date of birth, residential address, Social Security number, insurance member ID, and diagnosis code against `samples/rubric_spec_healthcare_patient_intake_form.json`.
+
+1. **Type the following message into your AI assistant chat**:
+   ```text
+   /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
+   ```
+2. **Read the plain-language summary**:
+   The assistant lists each extracted field alongside its vote count (for example, `5/5` agreement) and flags any field that needs human attention.
+3. **Inspect the visual dashboard**:
+   Double-click `dashboard.html` in the project folder to view the original intake form on the left and the field-by-field verification rules and reviewer notes on the right.
+
+#### Example 2: Checking a Photo or Scan of a Laboratory Report (JPEG or PNG)
+Suppose a care coordinator has a JPEG scan of a molecular lab report (`samples/cancer_screening_lab_report.jpg`) rather than a digital PDF, and wants to confirm that biomarker scores, tumor fraction percentages, and gene variants were read accurately without confusing patient IDs with specimen accession numbers.
+
+1. **Send the command in chat**:
+   ```text
+   /pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json
+   ```
+2. **Review the verified results**:
+   All five reviewers verify that the patient's Medical Record Number was not mixed up with the lab Accession ID and that only detected mutations were included.
+3. **Zoom into the scan**:
+   Open `dashboard.html` and use the `+`, `-`, and `100%` zoom buttons in Tab 1 (`1. Document & Rubric`) to compare the scanned image directly against the extracted values.
+
+#### Example 3: Reading Handwritten Entries in Character Boxes
+Suppose an applicant fills out an identification number by hand inside pre-printed character boxes where pen strokes touch the small vertical divider ticks. A basic scanner might misread a curved handwritten `C` touching a tick mark as the number `4`.
+
+1. **Run the same command on the scanned form**:
+   ```text
+   /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
+   ```
+2. **Automatic Cleanup and Independent Cross-Check**:
+   Behind the scenes, the skill crops the character boxes at full resolution, removes the thin printed divider lines while keeping the pen ink intact, and asks all five reviewers to trace the handwriting independently.
+3. **Error Catching**:
+   If the initial reader mistook a character because of a printed box line, the reviewers flag `TEMPLATE_INK_CONFLATION` and provide the corrected characters in Tab 4 (`4. Consensus & Routing`).
+
+#### Example 4: Loading Another Document or Changing AI Models in `dashboard.html`
+1. Open `dashboard.html` in any web browser.
+2. **To inspect a different completed report or PDF**: Click **Load Run / PDF** in the top bar (or drag and drop a `.json` report and `.pdf` / image file onto the page). All charts, tables, and the document viewer update immediately.
+3. **To switch to a newer AI model**: In the **Model Configuration** bar near the top of `dashboard.html`, type or select the desired model name in **Stage 1 Extractor Model** or **Stage 2 Judge Model**, then click **Copy /pdf-llm-as-judge** and paste that command into your AI assistant chat.
 
 ---
 
 ## Data Privacy and Synthetic Data Notice
 
-All sample files provided in the `samples/` directory are completely synthetic and generated for demonstration and testing purposes. They contain no real personal data or Protected Health Information (PHI).
+All sample files in `samples/` and `output/` are synthetic datasets created strictly for testing and demonstration. They contain no real personal data or Protected Health Information (PHI).
 
 ---
 
 ## Installation and Prerequisites
 
 ### Requirements
-- Python 3.10 or higher
-- `requests`, `pypdf`, `pyyaml`, `pytest`
+- Python `3.10` or higher
+- Python packages: `requests`, `pypdf`, `pyyaml` (plus `Pillow`, `numpy`, and `pytest` for image filtering and test execution)
 
-### Setup & Authentication
+### Setup and Authentication
 
-1. Clone or copy the repository into your workspace:
+1. Open a terminal in the project root directory:
    ```bash
-   cd pdf-llm-as-judge-skill
+   pip install -e ".[dev]"
    ```
 
-2. Choose your authentication method (Application Default Credentials or API Key):
+2. Configure authentication using either Application Default Credentials (ADC) or an API key:
 
-   #### Option A: Application Default Credentials (ADC) (Default - No API Key Required)
-   If authenticated via Application Default Credentials, no API key is required:
+   #### Option A: Application Default Credentials (ADC)
    ```bash
-   # Log in to ADC
    gcloud auth application-default login
    ```
-   - **Project Auto-Detection**: The client automatically detects your active project from environment variables or active ADC configuration.
-   - **Optional Environment Variables**:
-     ```bash
-     export VERTEX_PROJECT="your-project-id"   # Explicit project override
-     export VERTEX_LOCATION="us-central1"      # Default region (us-central1)
-     ```
-   - **Standalone Environments**: When ADC credentials exist in the user environment, standalone agent harnesses and scripts automatically detect your credentials.
+   Optional environment overrides when using cloud project routing:
+   ```bash
+   export VERTEX_PROJECT="your-project-id"
+   export VERTEX_LOCATION="us-central1"
+   ```
 
    #### Option B: API Key Authentication
-   To authenticate using an API key:
    ```bash
-   export GEMINI_API_KEY="AIzaSy..."
+   export GEMINI_API_KEY="your-api-key"
    ```
-   Alternatively, pass `--api-key AIzaSy...` directly to the CLI scripts.
+   Alternatively, pass `--api-key <key>` directly to the CLI scripts.
 
 ---
 
-## How to Run the Python Code
+## Command-Line Usage
 
-### 1. Running the Full Pipeline via CLI (with UI Dashboard)
-
-Run the full extraction and consensus pipeline on a PDF or image file (JPEG, PNG, WebP) and rubric, exporting both JSON and the HTML UI dashboard:
+### 1. Run the Full Extraction and Consensus Pipeline
 
 ```bash
 python3 scripts/run_pipeline.py \
@@ -224,11 +276,11 @@ python3 scripts/run_pipeline.py \
   --dashboard dashboard.html
 ```
 
-You can also pass `--image path/to/image.png` or `--pdf path/to/document.pdf`.
+`--image` and `--pdf` are also accepted as aliases for `--document`.
 
-### 2. Evaluating an Existing Candidate Extraction
+### 2. Evaluate an Existing Candidate Extraction JSON
 
-If you already have candidate extraction JSON and want to run the 5x Judge Panel and Consensus Engine:
+To run Stage 2 (5x Judge Panel) and Stage 3 (Consensus Engine) on an existing candidate JSON file without re-running Stage 1:
 
 ```bash
 python3 scripts/evaluate_candidate.py \
@@ -239,226 +291,64 @@ python3 scripts/evaluate_candidate.py \
   --dashboard dashboard.html
 ```
 
-### 3. Advanced CLI Options
+### 3. CLI Reference
 
 | Flag | Type | Default | Description |
 | :--- | :--- | :--- | :--- |
-| `--document`, `--image`, `--pdf` | String | (Required) | Path to input document or image file (`.pdf`, `.jpeg`, `.jpg`, `.png`, `.webp`, `.heic`) |
-| `--rubric` | String | (Required) | Path to JSON rubric specification file |
-| `--candidate-json` | String | `None` | Pre-extracted candidate JSON (evaluates candidate directly) |
-| `--output` | String | `None` | File path to write full JSON report |
-| `--dashboard` | String | `None` | File path to generate HTML UI Dashboard |
+| `--document`, `--image`, `--pdf` | String | Required | Relative or local path to input document (`.pdf`, `.jpeg`, `.jpg`, `.png`, `.webp`, `.heic`) |
+| `--rubric` | String | Required | Path to JSON rubric specification file |
+| `--candidate-json` | String | `None` | Pre-extracted candidate JSON (skips Stage 1 extraction) |
+| `--output` | String | `None` | File path to write structured JSON report |
+| `--dashboard` | String | `dashboard.html` | File path to write standalone HTML dashboard |
+| `--no-dashboard` | Flag | `False` | Disable HTML dashboard generation |
 | `--api-key` | String | `None` | Explicit API key (overrides `GEMINI_API_KEY`) |
-| `--extractor-model` | String | `gemini-3.8-flash` | Model for primary extraction |
-| `--judge-model` | String | `gemini-3.8-flash` | Model for judge panel |
-| `--thinking-budget` | Integer | `2048` | Reasoning budget token count for judges |
+| `--extractor-model` | String | `gemini-3.8-flash` | Model identifier for Stage 1 extraction |
+| `--judge-model` | String | `gemini-3.8-flash` | Model identifier for Stage 2 judge panel |
+| `--thinking-budget` | Integer | `2048` | Reasoning token budget per judge |
 | `--num-judges` | Integer | `5` | Number of concurrent judges in panel |
-| `--min-pass-ratio` | Float | `0.8` | Pass ratio threshold for auto-accept |
+| `--min-pass-ratio` | Float | `0.8` | Minimum pass ratio for automatic acceptance |
 | `--verbose`, `-v` | Flag | `False` | Enable debug logging |
-
----
-
-## Running the Automated Test Suite
-
-Run unit, integration, dashboard generation, and synthetic error injection tests using `pytest`:
-
-```bash
-pytest -v tests/
-```
-
-### Test Coverage Summary:
-- `test_models.py`: Validates rubric parsing, syntactic rules, and judge payload deserialization.
-- `test_consensus.py`: Tests mathematical consensus logic across all confidence tiers (5/5, 4/5, 3/5, 2/5, 1/5, 0/5) and degraded quorums.
-- `test_stage1_and_judge_prompts.py`: Verifies Stage 1 template subtraction rules, Stage 2 Adversarial Forensic Protocol, and failure mode enums.
-- `test_synthetic_discrepancies.py`: Injects invalid SSNs and clinic address mix-ups to verify majority rejection and failure mode attribution.
-- `test_pipeline_e2e.py`: Executes end-to-end pipeline against the sample PDF and generates the UI Dashboard.
-
----
-
-## Non-Technical User Guide: How to Use This Skill
-
-This skill enables users to extract and automatically verify structured information from complex documents (such as medical records, intake forms, lab reports, invoices, and IDs) in PDF or image format without needing to write code.
-
-### Why Multi-Agent Consensus Matters
-
-Traditional automated document processing systems rely on a single model or optical character recognition (OCR) engine. When an ambiguous field or low-contrast scan is encountered, single-engine systems frequently produce silent hallucinations or digit transpositions (such as swapping numbers in an ID or misreading clinic addresses as patient addresses).
-
-This skill eliminates single-point failures by pairing high-throughput extraction with an independent panel of five parallel AI judges. Each judge inspects the original document visual, verifies field syntax and rules, and casts a vote. Consensus math determines whether data is trusted automatically or routed for human review.
-
----
-
-### How It Works in 3 Simple Steps
-
-1. **Extraction (Primary Reader)**: An AI reader examines your PDF or image document and extracts all requested fields according to the verification rubric rules.
-2. **Independent Panel Review (5 Judges)**: Five independent AI judges review the extracted data in parallel against the original visual document pages. Each judge verifies:
-   - Does the extracted value exactly match what is shown in the document?
-   - Does the value follow expected formatting rules (such as date formats or ID patterns)?
-   - Is there any evidence of hallucination, missed fields, or data transposition?
-3. **Consensus & Routing**: The system counts the number of judges in agreement and makes a deterministic routing decision:
-   - **5 out of 5 Judges Agree (Unanimous Pass)**: Extreme confidence. The data is verified and automatically accepted.
-   - **4 out of 5 Judges Agree (Majority Pass)**: High confidence. The data is accepted with a note of the single dissenting reason.
-   - **3 out of 5 Judges Agree (Contested)**: Split opinion. The field is flagged for Human-in-the-Loop (HITL) review with the conflicting arguments.
-   - **2 or Fewer Judges Agree (Rejected)**: Low confidence or failed validation. The extraction is flagged for correction or re-scan.
-
----
-
-### Step-by-Step Practical Examples
-
-#### Example A: Processing a Multi-Page PDF Document
-
-Suppose you have a clinical intake form (`samples/healthcare_patient_intake_form.pdf`) and the target rubric specification (`samples/rubric_spec_healthcare_patient_intake_form.json`).
-
-1. **Send the request in your AI agent chat**:
-   ```text
-   /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
-   ```
-2. **Review the summary response**:
-   The agent displays the verified fields (patient name, date of birth, insurance member ID, etc.) along with their consensus scores (e.g. 5/5 Unanimous).
-3. **Open the visual dashboard**:
-   Open `dashboard.html` in your browser to view the original PDF on the left and the 5-judge evaluation breakdown on the right.
-
-#### Example B: Processing a Scanned Image File (JPEG, PNG, WebP)
-
-Suppose you have a photo or scan of a lab report (`samples/cancer_screening_lab_report.jpg`) and the corresponding rubric (`samples/rubric_spec_cancer_screening_lab_report.json`).
-
-1. **Send the request in your AI agent chat**:
-   ```text
-   /pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json
-   ```
-2. **Review the extracted molecular findings**:
-   The agent extracts the clinical biomarkers, tumor fraction, and gene mutations, verifying that all five judges agree with the values in the report image.
-3. **Inspect the interactive image viewer**:
-   In `dashboard.html`, the Document Inspector displays the image with zoom and pan controls alongside the extraction rules.
-
-#### Example C: Processing a Handwritten Form with Pre-Printed Comb Boxes
-
-Suppose you have a handwritten patient registration or intake card containing segmented character boxes with vertical dividers and baseline tick marks, where pen strokes touch the pre-printed box borders.
-
-1. **Send the request in your AI agent chat**:
-   ```text
-   /pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
-   ```
-2. **Automated Line Suppression and Forensic Verification**:
-   The system automatically applies image filtering to remove printed box dividers and tick marks while protecting the pen ink strokes. Five independent judges independently trace the handwritten letters and numbers (verifying that characters such as an open 'C' or oval 'o' were not mistaken for '4' or 'a' due to touching tick marks).
-3. **Review Consensus & Corrections**:
-   If an initial reader misinterprets a letter because of an intersecting line, the judges overrule the error and supply the correct handwritten value in the validated output.
-
----
-
-### Navigating the Interactive Dashboard
-
-When the pipeline finishes, it generates a standalone HTML file at `dashboard.html`. You can open this file in any web browser to inspect the results across five tabs:
-
-1. **Document & Rubric Inspector**: View the raw document (PDF pages or image scan) alongside the rubric verification criteria.
-2. **Primary Extraction**: Inspect the initial candidate extraction, token diagnostics, and extraction parameters.
-3. **Judge Panel Matrix**: View a 5-column side-by-side comparison of all five judges, including their individual reasoning steps, citations, and failure mode detections.
-4. **Consensus & Routing**: Review consensus summary cards, field-by-field agreement ratios, confidence tiers, and the validated clean data payload ready for export.
-5. **Provenance & Audit Trail**: Access the full timestamped JSON audit log with copy-to-clipboard and file download options.
 
 ---
 
 ## Using the Skill in an Agent Harness
 
-This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`) compatible with modern AI agent harnesses, orchestration frameworks, and interactive UI dashboards.
-
-### Invocation & Best Practices
-
-1. **Invoke via Slash Command or Prompt**:
-   You can invoke the skill directly using the registered slash command with a PDF document or raw image file (`.jpg`, `.jpeg`, `.png`, `.webp`, `.heic`):
+1. **Slash Command Invocation**:
    ```text
-   /pdf-llm-as-judge <PATH_TO_PDF_OR_IMAGE> <PATH_TO_RUBRIC_JSON>
+   /pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json
    ```
 
-2. **Supported File Formats**:
-   - **PDF**: Multi-page PDF documents (e.g. `samples/cancer_screening_lab_report.pdf`, `samples/healthcare_patient_intake_form.pdf`).
-   - **Images**: High-resolution image scans in JPEG, PNG, WebP, or HEIC formats (e.g. `samples/cancer_screening_lab_report.jpg`).
+2. **Pass Rubric Paths as Text Arguments**:
+   **Important:** Reference JSON rubric paths directly in your prompt text (for example, `samples/rubric_spec_cancer_screening_lab_report.json`) rather than attaching `.json` files as binary media uploads, since multimodal generation endpoints reject `application/json` inline media attachments with `HTTP 400`.
 
-3. **Always Reference File Paths Directly (Avoid Uploading JSON Attachments)**:
-   > [!IMPORTANT]
-   > **Provide file paths directly in your prompt text** (e.g., `samples/cancer_screening_lab_report.jpg` and `samples/rubric_spec_cancer_screening_lab_report.json`).
-   > Do **not** attach or upload the `.json` rubric file as a chat media attachment. Multimodal API endpoints do not accept `application/json` as an `inlineData` binary attachment type and will return `HTTP 400 Bad Request`.
-
-4. **Customizing Models & Judge Parameters**:
-   You can customize the models used for extraction and judging directly in your prompt or command:
-   - **`--extractor-model`**: Stage 1 Primary Extraction model (default: `gemini-3.8-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
-   - **`--judge-model`**: Stage 2 Judge Panel model (default: `gemini-3.8-flash`, alternatives: `gemini-2.5-flash`, `gemini-2.5-pro`).
-   - **`--thinking-budget`**: Number of reasoning tokens per judge (default: `2048`, alternatives: `1024`, `4096`, `8192`).
-   - **`--num-judges`**: Number of concurrent judges in the panel (default: `5`, alternatives: `3`, `7`).
+3. **Customizing Models and Reasoning Budgets**:
+   ```text
+   /pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-2.5-pro --judge-model gemini-2.5-pro --thinking-budget 4096 --num-judges 5
+   ```
 
 ---
 
-### Sample Prompts for Agent Harnesses
+## Running the Automated Test Suite
 
-#### 1. Cancer Screening Lab Report (PDF Input)
-```text
-/pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json
+Execute all unit, integration, synthetic error injection, comb filter, and dashboard compliance tests with `pytest`:
+
+```bash
+pytest -v tests/
 ```
 
-#### 2. Cancer Screening Lab Report (Image Input - JPEG)
-```text
-/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json
-```
-
-#### 3. Healthcare Intake Form (Default Models)
-```text
-/pdf-llm-as-judge samples/healthcare_patient_intake_form.pdf samples/rubric_spec_healthcare_patient_intake_form.json
-```
-
-#### 4. Custom Model Selection (Explicit Flash & Pro Pairing on Image)
-```text
-/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-3.8-flash --judge-model gemini-3.8-flash --thinking-budget 2048
-```
-
-#### 5. High-Reasoning Deep Evaluation (Higher Thinking Budget)
-```text
-/pdf-llm-as-judge samples/cancer_screening_lab_report.pdf samples/rubric_spec_cancer_screening_lab_report.json --extractor-model gemini-2.5-pro --judge-model gemini-2.5-pro --thinking-budget 4096 --num-judges 5
-```
-
-#### 6. Natural Language Prompt for Image Input with Output Specification
-```text
-Extract all clinical and demographic fields from the scan samples/cancer_screening_lab_report.jpg using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.8-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at dashboard.html.
-```
-
-#### 7. Evaluating Pre-Extracted Candidate JSON Against an Image Document
-```text
-/pdf-llm-as-judge samples/cancer_screening_lab_report.jpg samples/rubric_spec_cancer_screening_lab_report.json --candidate-json samples/expected_candidate_cancer_screening_lab_report.json
-```
+Test modules:
+- `tests/test_models.py`: Rubric parsing, syntactic constraints, and judge deserialization.
+- `tests/test_consensus.py`: Consensus scoring across agreement ratios (`5/5` to `0/5`), degraded quorums, and phantom dissent reconciliation.
+- `tests/test_comb_filter.py`: Normalized ROI cropping, vertical tick suppression, HSV color filtering, and comb auto-detection.
+- `tests/test_stage1_and_judge_prompts.py`: Stage 1 template subtraction prompts, Stage 2 Adversarial Forensic Protocol, and failure modes.
+- `tests/test_synthetic_discrepancies.py`: Rejection of injected SSN errors, clinic address confusions, and date transpositions.
+- `tests/test_pipeline_e2e.py`: End-to-end execution across PDF and JPEG inputs, `DESIGN.md` compliance checks, and dynamic model discovery fallback tests.
 
 ---
 
-### Expected Agent Response Pattern
+## Rubric and Output Schemas
 
-When you submit a prompt in an agent harness, the agent executes the underlying Python pipeline and provides a structured response:
-
-```markdown
-Extraction and Consensus Evaluation Completed:
-
-Summary:
-- Total Fields Evaluated: 12
-- Unanimous / Majority Pass (Auto-Accepted): 12 fields
-- Contested Fields (HITL Review): 0 fields
-- Rejected Fields: 0 fields
-- Active Judge Quorum: 5 of 5 judges reporting (100% quorum health)
-
-Key Accepted Values:
-- Patient Legal Name: Arthur Pendelton Hayes (5/5 Unanimous)
-- Date of Birth: 1961-04-14 (5/5 Unanimous)
-- Accession ID: ACC-2026-MCED-9184 (5/5 Unanimous)
-- Cancer Signal Status: SIGNAL DETECTED (5/5 Unanimous)
-- Primary Signal Origin: Colorectal (84% Probability) (5/5 Unanimous)
-- Tumor Fraction: 3.8% ctDNA (5/5 Unanimous)
-- Pathogenic Mutations: KRAS G12D (2.4% VAF), APC R1450* (3.1% VAF), TP53 R273H (1.9% VAF) (5/5 Unanimous)
-
-Artifacts Generated:
-- Full Consensus Report: output/extraction_report.json
-- Interactive UI Dashboard: dashboard.html (open to inspect PDF pages, rubric rules, 5-column judge matrix, and audit trail)
-```
-
----
-
-## Rubric Specification Format
-
-Rubrics are defined in standard JSON format:
+### Sample Rubric Specification (`RubricSpec`)
 
 ```json
 {
@@ -481,34 +371,12 @@ Rubrics are defined in standard JSON format:
           "HALLUCINATION"
         ]
       }
-    },
-    {
-      "field_name": "social_security_number",
-      "syntactic_rules": {
-        "required": true,
-        "type": "string",
-        "format_regex": "^\\d{3}-\\d{2}-\\d{4}$",
-        "masking_allowed": false
-      },
-      "semantic_grounding_rules": {
-        "source_section": "SECTION 1: PATIENT IDENTIFICATION",
-        "verification_criteria": "Must match verbatim from Section 1. Any digit transposition must trigger failure.",
-        "failure_modes": [
-          "DIGIT_TRANSPOSITION",
-          "HALLUCINATION",
-          "FORMAT_MISMATCH"
-        ]
-      }
     }
   ]
 }
 ```
 
----
-
-## Output Report Structure
-
-The pipeline generates a clean, auditable JSON payload:
+### Sample Output Report (`PipelineReport`)
 
 ```json
 {
@@ -525,7 +393,7 @@ The pipeline generates a clean, auditable JSON payload:
     "quorum_degraded": false,
     "judge_errors": []
   },
-  "candidate_extraction": { ... },
+  "candidate_extraction": {},
   "accepted_payload": {
     "patient_full_name": "Eleanor Vance Sterling",
     "date_of_birth": "1984-11-23",
@@ -546,11 +414,11 @@ The pipeline generates a clean, auditable JSON payload:
       "total_judges": 5,
       "agreement_ratio": "5/5 (100%)",
       "status": "UNANIMOUS_PASS",
-      "confidence_band": "Extreme Confidence (>=98%)",
+      "confidence_band": "Very High Confidence (>=98%)",
       "routing_action": "Auto-Accept"
     }
   },
-  "audit_trail": [ ... ]
+  "audit_trail": []
 }
 ```
 

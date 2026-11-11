@@ -1,9 +1,9 @@
-"""Tests for Surgical ROI Cropping & Comb-Line Suppression Pipeline.
+"""Tests for Targeted ROI Cropping and Comb-Line Suppression Pipeline.
 
 Validates:
 1. utils.comb_filter: crop_field_roi, suppress_comb_lines, and prepare_crop_payload.
 2. models: field_type and bounding_box support in FieldExtractionCriteria.
-3. stage1_extractor: high-resolution cropped comb box prompt construction and surgical intercept.
+3. stage1_extractor: high-resolution cropped comb box prompt construction and targeted ROI intercept.
 4. stage2_judge_panel: adversarial forensic comb crop audit prompt and candidate overturning.
 """
 

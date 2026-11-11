@@ -162,7 +162,7 @@ class GeminiClient:
                 headers["x-goog-api-key"] = self.api_key
             return endpoint, headers
 
-        # Standard Developer / AI Studio endpoint
+        # Direct API key / OAuth endpoint
         if self.api_key:
             endpoint = f"{self.base_url}/{model}:generateContent?key={self.api_key}"
             headers["x-goog-api-key"] = self.api_key
