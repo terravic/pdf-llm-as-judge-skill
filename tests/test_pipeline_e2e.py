@@ -379,3 +379,117 @@ def test_cli_with_image_flag(mock_gen, tmp_path, monkeypatch):
     assert "source-doc-image" in dash_content
 
 
+@patch("pdf_consensus_evaluator.gemini_client.GeminiClient.generate_content", side_effect=mock_cancer_generate_dispatcher)
+def test_dashboard_design_md_compliance(mock_gen, tmp_path):
+    """Verifies generated dashboard strictly adheres to DESIGN.md rules and eliminates AI slop."""
+    from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html
+
+    rubric = RubricSpec.from_json_file(CANCER_RUBRIC_PATH)
+    pipeline = ExtractionConsensusPipeline(api_key="test-key", num_judges=5)
+    report = pipeline.run(pdf_path=CANCER_PDF_PATH, rubric=rubric)
+
+    out_html = tmp_path / "dashboard.html"
+    html_content = generate_dashboard_html(
+        report=report,
+        document_path=CANCER_PDF_PATH,
+        rubric=rubric,
+        output_html_path=str(out_html),
+    )
+
+    # 1. Typography: Instrument Serif, DM Sans, IBM Plex Mono, tabular-nums; no Inter or Roboto
+    assert "Instrument Serif" in html_content
+    assert "DM Sans" in html_content
+    assert "IBM Plex Mono" in html_content
+    assert "tabular-nums" in html_content
+    assert "Roboto" not in html_content
+    assert "Inter," not in html_content
+
+    # 2. Surfaces & No AI Slop: no CSS gradients, no purple accent tokens
+    assert "linear-gradient" not in html_content
+    assert "radial-gradient" not in html_content
+    assert "--accent-purple" not in html_content
+    assert "#7c3aed" not in html_content.lower()
+    assert "#a855f7" not in html_content.lower()
+
+    # 3. Three-icon theme selector (Light, Dark, System) + OS fallback
+    assert 'id="theme-btn-light"' in html_content
+    assert 'title="Light Theme"' in html_content
+    assert 'data-theme-mode="light"' in html_content
+    assert 'id="theme-btn-dark"' in html_content
+    assert 'title="Dark Theme"' in html_content
+    assert 'data-theme-mode="dark"' in html_content
+    assert 'id="theme-btn-system"' in html_content
+    assert 'title="System Theme"' in html_content
+    assert 'data-theme-mode="system"' in html_content
+    assert "prefers-color-scheme: dark" in html_content
+    assert '"system_theme":' in html_content
+
+    # 4. Exact Light and Dark Mode hex tokens (DESIGN.md Section 3)
+    for light_hex in ("#FAFAF9", "#FFFFFF", "#E7E5E4", "#1C1917", "#787774"):
+        assert light_hex in html_content
+    for dark_hex in ("#0D0E11", "#16171D", "#292A30", "#ECE8E2", "#9A9895"):
+        assert dark_hex in html_content
+
+    # 5. Semantic Data Visualization Palette (DESIGN.md Section 5)
+    for viz_hex in ("#0D9488", "#D97706", "#4F46E5", "#059669", "#E11D48"):
+        assert viz_hex in html_content
+
+    # 6. Domain-accurate visualization titles, no 3D molecular view, & dynamic model/runtime hooks
+    assert "Structural Data Diagram" not in html_content
+    assert "structural-3d-canvas" not in html_content
+    assert "Extracted Field Breakdown" in html_content
+    assert "Interactive Relationship Node Map" in html_content
+    assert 'id="model-extractor-input"' in html_content
+    assert 'id="model-judge-input"' in html_content
+    assert 'id="available-models-datalist"' in html_content
+    assert 'id="copy-agent-cmd-btn"' in html_content
+    assert 'id="copy-cli-cmd-btn"' in html_content
+    assert "updateDashboardState" in html_content
+    assert "EventSource" in html_content
+    assert "load-files-input" in html_content
+
+
+def test_discover_available_models_and_fallback(monkeypatch):
+    """Tests dynamic Gemini model discovery from active credentials and graceful offline fallback."""
+    from unittest.mock import MagicMock
+    from pdf_consensus_evaluator.dashboard_generator import _discover_available_models
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+    mock_resp.json.return_value = {
+        "models": [
+            {
+                "name": "models/gemini-4.0-flash-preview",
+                "supportedGenerationMethods": ["generateContent", "countTokens"],
+            },
+            {
+                "name": "models/gemini-4.0-pro",
+                "supportedGenerationMethods": ["generateContent"],
+            },
+            {
+                "name": "models/text-embedding-004",
+                "supportedGenerationMethods": ["embedContent"],
+            },
+        ]
+    }
+
+    monkeypatch.setenv("GEMINI_API_KEY", "test-discovery-key")
+    with patch("requests.get", return_value=mock_resp):
+        models = _discover_available_models(
+            active_models=["gemini-3.8-flash"],
+            allow_network=True,
+        )
+
+    assert models[0] == "gemini-3.8-flash"
+    assert "gemini-4.0-flash-preview" in models
+    assert "gemini-4.0-pro" in models
+    assert "text-embedding-004" not in models
+
+    # Verify offline / network failure fallback never raises and returns active + fallback models
+    with patch("requests.get", side_effect=OSError("offline")):
+        fallback_models = _discover_available_models(
+            active_models=["custom-future-model-v9"],
+            allow_network=True,
+        )
+    assert fallback_models[0] == "custom-future-model-v9"
+    assert "gemini-3.8-flash" in fallback_models

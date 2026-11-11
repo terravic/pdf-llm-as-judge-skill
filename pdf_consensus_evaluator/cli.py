@@ -57,7 +57,7 @@ def parse_args(args: list[str] | None = None) -> argparse.Namespace:
         "--dashboard",
         type=str,
         default=None,
-        help="Path to generate self-contained HTML UI Dashboard (defaults to <output_stem>_dashboard.html or ui/index.html)",
+        help="Path to generate self-contained HTML UI Dashboard (defaults to <output_stem>_dashboard.html or dashboard.html)",
     )
     parser.add_argument(
         "--no-dashboard",
@@ -176,7 +176,7 @@ def main() -> int:
             else:
                 dashboard_path = f"{args.output}_dashboard.html"
         else:
-            dashboard_path = "ui/index.html"
+            dashboard_path = "dashboard.html"
 
     if dashboard_path:
         from pdf_consensus_evaluator.dashboard_generator import generate_dashboard_html

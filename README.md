@@ -97,15 +97,16 @@ To resolve this without altering standard document processing pipelines:
 
 ## Interactive UI Dashboard
 
-The skill generates a standalone, responsive UI dashboard (`ui/index.html`) upon executing the pipeline on an input PDF and rubric specification. It renders natively inside standard web browsers and iframe-capable agent environments, structured across five tabs from left to right:
+The skill generates a standalone, responsive UI dashboard (`dashboard.html`) upon executing the pipeline on an input PDF or image and rubric specification. It renders natively inside standard web browsers and iframe-capable agent environments, structured across five tabs from left to right:
 
-1. **PDF & Rubric Inspector**: High-fidelity multi-page PDF rendering with page switching alongside interactive rubric rules.
-2. **Primary Extraction**: Inspects candidate extracted fields, token budgets, and model parameters.
-3. **Judge Panel Matrix**: 5-column visualization of the parallel judge workers, displaying reasoning tokens, verdicts, and failure mode citations.
-4. **Consensus & Routing**: Statistical summary cards, field consensus ratios, confidence tiers, and validated clean payload.
+1. **PDF & Rubric Inspector**: High-fidelity multi-page PDF or image rendering with page switching and zoom alongside verification rubric rules.
+2. **Primary Extraction**: Inspects candidate extracted fields, token budgets, model parameters, and a structured Extracted Field Breakdown table & completeness chart.
+3. **Judge Panel Matrix**: Judge × Field verification heatmap, latency chart, and parallel judge evaluation matrix displaying verdicts and failure mode citations.
+4. **Consensus & Routing**: Summary statistics strip, field consensus ratios, Interactive Relationship Node Map, confidence tiers, and validated clean payload.
 5. **Provenance & Audit Trail**: Complete JSON audit trail viewer with copy and export functionality.
 
-- **Theme Toggle**: Switch between Light and Dark modes with persistent preferences.
+- **Model Selector & Command Builder**: Editable Extractor and Judge model inputs pre-populated with dynamically discovered Gemini models (`<datalist>`) while supporting any custom future model ID, generating one-click copyable `/pdf-llm-as-judge` and CLI commands.
+- **Theme Selector**: Switch between Light, Dark, and System modes with persistent preferences and live OS appearance tracking.
 
 ---
 
@@ -114,19 +115,18 @@ The skill generates a standalone, responsive UI dashboard (`ui/index.html`) upon
 ```
 pdf-llm-as-judge-skill/
 ├── .gitignore                                      # Git ignore rules
+├── DESIGN.md                                       # Dashboard visual & technical design specification
 ├── SKILL.md                                        # Main skill instruction file for AI agents
 ├── plugin.json                                     # Plugin registration manifest
 ├── README.md                                       # Project documentation
 ├── prd.md                                          # Product Requirements Document
 ├── pyproject.toml                                  # Python package configuration
 ├── LICENSE                                         # Apache 2.0 license
+├── dashboard.html                                  # Singular standalone interactive UI Dashboard
 ├── assets/
 │   └── pipeline_workflow_dashboard.png             # Architecture pipeline and dashboard diagram
 ├── output/
-│   ├── test_cancer_screening_dashboard.html        # Sample generated HTML UI dashboard
 │   └── test_cancer_screening_evaluation.json       # Sample generated evaluation report
-├── ui/
-│   └── index.html                                  # Standalone interactive UI Dashboard
 ├── scripts/
 │   ├── run_pipeline.py                             # Command-line entry point for full pipeline
 │   └── evaluate_candidate.py                       # Evaluation-only script for pre-extracted candidate
@@ -221,7 +221,7 @@ python3 scripts/run_pipeline.py \
   --document samples/healthcare_patient_intake_form.pdf \
   --rubric samples/rubric_spec_healthcare_patient_intake_form.json \
   --output output/extraction_report.json \
-  --dashboard ui/index.html
+  --dashboard dashboard.html
 ```
 
 You can also pass `--image path/to/image.png` or `--pdf path/to/document.pdf`.
@@ -236,7 +236,7 @@ python3 scripts/evaluate_candidate.py \
   --rubric samples/rubric_spec_healthcare_patient_intake_form.json \
   --candidate-json samples/expected_candidate_healthcare_patient_intake_form.json \
   --output output/evaluation_report.json \
-  --dashboard ui/index.html
+  --dashboard dashboard.html
 ```
 
 ### 3. Advanced CLI Options
@@ -315,7 +315,7 @@ Suppose you have a clinical intake form (`samples/healthcare_patient_intake_form
 2. **Review the summary response**:
    The agent displays the verified fields (patient name, date of birth, insurance member ID, etc.) along with their consensus scores (e.g. 5/5 Unanimous).
 3. **Open the visual dashboard**:
-   Open `ui/index.html` in your browser to view the original PDF on the left and the 5-judge evaluation breakdown on the right.
+   Open `dashboard.html` in your browser to view the original PDF on the left and the 5-judge evaluation breakdown on the right.
 
 #### Example B: Processing a Scanned Image File (JPEG, PNG, WebP)
 
@@ -328,7 +328,7 @@ Suppose you have a photo or scan of a lab report (`samples/cancer_screening_lab_
 2. **Review the extracted molecular findings**:
    The agent extracts the clinical biomarkers, tumor fraction, and gene mutations, verifying that all five judges agree with the values in the report image.
 3. **Inspect the interactive image viewer**:
-   In `ui/index.html`, the Document Inspector displays the image with zoom and pan controls alongside the extraction rules.
+   In `dashboard.html`, the Document Inspector displays the image with zoom and pan controls alongside the extraction rules.
 
 #### Example C: Processing a Handwritten Form with Pre-Printed Comb Boxes
 
@@ -347,7 +347,7 @@ Suppose you have a handwritten patient registration or intake card containing se
 
 ### Navigating the Interactive Dashboard
 
-When the pipeline finishes, it generates a standalone HTML file at `ui/index.html`. You can open this file in any web browser to inspect the results across five tabs:
+When the pipeline finishes, it generates a standalone HTML file at `dashboard.html`. You can open this file in any web browser to inspect the results across five tabs:
 
 1. **Document & Rubric Inspector**: View the raw document (PDF pages or image scan) alongside the rubric verification criteria.
 2. **Primary Extraction**: Inspect the initial candidate extraction, token diagnostics, and extraction parameters.
@@ -416,7 +416,7 @@ This project is packaged as a standard agent skill (`SKILL.md` and `plugin.json`
 
 #### 6. Natural Language Prompt for Image Input with Output Specification
 ```text
-Extract all clinical and demographic fields from the scan samples/cancer_screening_lab_report.jpg using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.8-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at ui/index.html.
+Extract all clinical and demographic fields from the scan samples/cancer_screening_lab_report.jpg using rubric samples/rubric_spec_cancer_screening_lab_report.json. Run the 5-judge consensus panel using gemini-3.8-flash with 2048 thinking tokens. Save the report to output/cancer_report.json and generate the UI dashboard at dashboard.html.
 ```
 
 #### 7. Evaluating Pre-Extracted Candidate JSON Against an Image Document
@@ -451,7 +451,7 @@ Key Accepted Values:
 
 Artifacts Generated:
 - Full Consensus Report: output/extraction_report.json
-- Interactive UI Dashboard: ui/index.html (open to inspect PDF pages, rubric rules, 5-column judge matrix, and audit trail)
+- Interactive UI Dashboard: dashboard.html (open to inspect PDF pages, rubric rules, 5-column judge matrix, and audit trail)
 ```
 
 ---

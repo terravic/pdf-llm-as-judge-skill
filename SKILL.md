@@ -77,15 +77,16 @@ This adversarial protocol, surgical comb cropping, and template subtraction spec
 
 ## UI Dashboard Support
 
-The skill generates a self-contained interactive UI dashboard (`ui/index.html`) upon executing the pipeline for the given input document and rubric specification. The dashboard renders inside browser and iframe environments.
+The skill generates a self-contained interactive UI dashboard (`dashboard.html`) upon executing the pipeline for the given input document and rubric specification. The dashboard renders inside browser and iframe environments.
 
 Features (Organized across 5 tabs from left to right):
 1. **Document & Rubric Inspector**: Visual multi-page PDF or image viewer with zoom/pan alongside rubric specifications.
-2. **Primary Extraction**: Candidate extraction viewer with thinking token diagnostics and model parameters.
-3. **Judge Panel Matrix**: 5-column parallel judge grid displaying reasoning tokens, field verdicts, and citations.
-4. **Consensus & Routing**: Summary statistics cards, field agreement ratios (k / 5), confidence bands, and validated output payload.
+2. **Primary Extraction**: Candidate extraction viewer with thinking token diagnostics, model parameters, and an Extracted Field Breakdown table & completeness chart.
+3. **Judge Panel Matrix**: Judge × Field verification heatmap, latency telemetry, and parallel judge matrix displaying reasoning justifications, field verdicts, and citations.
+4. **Consensus & Routing**: Summary statistics, field agreement ratios (k / 5), Interactive Relationship Node Map, confidence bands, and validated output payload.
 5. **Provenance & Audit Trail**: Complete JSON audit trail viewer with one-click clipboard copy and report download.
-- Dark and Light mode toggle button with persistent preferences.
+- **Model Configuration & Command Builder**: Editable Extractor and Judge model text inputs backed by dynamically discovered Gemini `<datalist>` suggestions, emitting one-click copyable `/pdf-llm-as-judge` and CLI commands.
+- Light, Dark, and System mode theme selector with persistent preferences and live OS appearance tracking.
 
 ---
 
@@ -125,7 +126,7 @@ python3 scripts/run_pipeline.py \
   --document samples/healthcare_patient_intake_form.pdf \
   --rubric samples/rubric_spec_healthcare_patient_intake_form.json \
   --output output/extraction_report.json \
-  --dashboard ui/index.html
+  --dashboard dashboard.html
 ```
 
 If evaluating an already extracted candidate JSON, use the candidate evaluation script:
@@ -136,12 +137,12 @@ python3 scripts/evaluate_candidate.py \
   --rubric <PATH_TO_RUBRIC_JSON> \
   --candidate-json <PATH_TO_CANDIDATE_JSON> \
   --output <PATH_TO_OUTPUT_JSON> \
-  --dashboard ui/index.html
+  --dashboard dashboard.html
 ```
 
 ### Step 4: Emit Dashboard Artifact for Agent Harness
 When running within an agent harness or framework:
-1. **Interactive Artifact Delivery**: After the pipeline generates the standalone dashboard HTML file (e.g., `ui/index.html` or `output/<stem>_dashboard.html`), the agent can emit this HTML as a user-facing artifact named `dashboard.html`.
+1. **Interactive Artifact Delivery**: After the pipeline generates the standalone dashboard HTML file (e.g., `dashboard.html` or `output/<stem>_dashboard.html`), the agent can emit this HTML as a user-facing artifact named `dashboard.html`.
 2. **Direct Visual Display**: This enables the harness to render the interactive HTML dashboard directly in preview panes or web views without copying files.
 
 ### Step 5: Interpret Output and Present Summary
@@ -149,14 +150,14 @@ Read the generated output JSON and present a clear summary:
 1. **Accepted Fields**: List all fields that attained unanimous or majority consensus along with their extracted values.
 2. **Contested Fields (HITL)**: Highlight fields that received split verdicts (e.g., 3/5 passes). Present the candidate value, the specific dissent reasons from the judges, and any proposed corrections for user confirmation.
 3. **Rejected Fields**: Highlight fields that failed verification (<= 2/5 passes), cite the detected failure modes (e.g., `FORMAT_MISMATCH`, `HALLUCINATION`, `FACILITY_ADDRESS_CONFUSED_AS_PATIENT`), and list the judge justifications.
-4. **UI Dashboard Link**: Provide a clickable markdown link to the generated dashboard file (e.g., [ui/index.html](ui/index.html) or [output/extraction_report_dashboard.html](output/extraction_report_dashboard.html)).
+4. **UI Dashboard Link**: Provide a clickable markdown link to the generated dashboard file (e.g., [dashboard.html](dashboard.html) or [output/extraction_report_dashboard.html](output/extraction_report_dashboard.html)).
 
 ---
 
 ## File References
 
 - Architecture Diagram: [assets/pipeline_workflow_dashboard.png](assets/pipeline_workflow_dashboard.png)
-- Dashboard UI: [ui/index.html](ui/index.html)
+- Dashboard UI: [dashboard.html](dashboard.html)
 - Dashboard Generator: [pdf_consensus_evaluator/dashboard_generator.py](pdf_consensus_evaluator/dashboard_generator.py)
 - Pipeline Runner: [scripts/run_pipeline.py](scripts/run_pipeline.py)
 - Candidate Evaluator: [scripts/evaluate_candidate.py](scripts/evaluate_candidate.py)
